@@ -5,78 +5,18 @@
 #typeBtn.green{border-color:rgba(137,255,155,.28) !important;background:rgba(137,255,155,.12) !important;}
 
 
-/* === iPhone SE系: 下にUI棚を作ってレバー領域を確保（自機が親指で隠れにくい） === */
-:root{ --uiShelf: 180px; }
-/* iPhone SE/8系(幅375pt前後) では棚を少し厚めに */
-@media (pointer:coarse) and (max-width: 390px){
-  :root{ --uiShelf: 220px; }
+/* === WRAP_SCALE_0_81: 画面(キャンバス枠)を全体的に10%小さく === */
+.wrap{display:grid;place-items:center;}
+.wrap{transform:scale(0.81);transform-origin:top center;}
+/* タッチ端末では少し下に寄せて見切れ防止 */
+@media (pointer:coarse){
+  .wrap{transform:translateY(10px) scale(0.81);} 
+/* caption(操作説明)はカット */
+.caption{display:none !important;}
+
 }
-
-/* 画面を上寄せして、下に棚(空白)を確保 */
-body{
-  place-items: start center;
-  padding-top: 16px;
-  padding-bottom: calc(var(--uiShelf) + env(safe-area-inset-bottom) + 16px);
-}
-
-/* ゲーム画面は「(画面高 - 棚)」基準で縮める */
-#game{
-  width: min(92vw, calc((92vh - var(--uiShelf)) * 9 / 16));
-  height: auto;
-  aspect-ratio: 9/16;
-  max-width: 520px;
-  touch-action: none;
-}
-
-
-/* === 画面を左右ギリギリまで：説明(caption)無し + iPhone SE系 edge-to-edge === */
-.caption{display:none !important; margin-top:0 !important;}
-
-/* デフォルト（PC等）は従来値 */
-:root{
-  --gameVW: 92vw;
-  --gameVH: 92vh;
-}
-
-/* iPhone SE/8系：左右はセーフエリア分だけ引いた上で100% */
-@media (pointer:coarse) and (max-width: 390px){
-  :root{
-    --gameVW: calc(100vw - env(safe-area-inset-left) - env(safe-area-inset-right));
-    --gameVH: 100vh;
-  }
-}
-
-/* #gameはこの変数で上書き（棚は維持） */
-#game{
-  width: min(var(--gameVW), calc((var(--gameVH) - var(--uiShelf)) * 9 / 16)) !important;
-}
-
-/* 外側フレームの余白/縁取りを削って左右を詰める */
-.frame{
-  padding: 0px !important;
-  border: none !important;
-  background: transparent !important;
-  box-shadow: none !important;
-}
-canvas{
-  border-radius: 0px !important;
-}
-
-/* 上下の余白も最小化（操作棚は維持） */
-body{
-  padding-top: 0px !important;
-  padding-bottom: calc(var(--uiShelf) + env(safe-area-inset-bottom)) !important;
-  padding-left: env(safe-area-inset-left) !important;
-  padding-right: env(safe-area-inset-right) !important;
-}
-
-
-/* === FRAME_SHIFT_DOWN: 画面(キャンバス枠)を少し下へ（縦画面） === */
-@media (pointer:coarse) and (orientation: portrait){
-  :root{ --frameShiftY: 22px; }
-  .frame{ transform: translateY(var(--frameShiftY)); }
-}
-</style></head><body><div class="frame"><div class="diag" id="diag"></div><canvas id="game" width="360" height="640" tabindex="0"></canvas></div><div id="pauseBtn" class="tbtn small warn pauseAboveJoy" data-tap="pause" aria-label="pause">PAUSE</div><div id="joystick" aria-label="move joystick"><div class="label">MOVE</div><div class="base"></div><div class="stick" id="stick"></div></div><div class="actions" aria-hidden="true"><div class="tbtn big gold" id="bombBtn" data-tap="bomb" aria-label="bomb">BOMB</div><div class="tbtn big" id="typeBtn" data-tap="type" aria-label="shot type">TYPE:N</div><div class="tbtn big green" id="focusBtn" data-hold="focus" aria-label="focus">FOCUS</div></div><div class="caption"><span class="pill">MOVE ←↑↓→ / SHOT Z / LASER X / BOMB C / FOCUS Shift / PAUSE Space / START Z / BGM: STAGE x7 OVERDRIVE (SUBBASS HEAVY)</span></div></div><script>
+</style></head><body><div class="frame"><div class="diag" id="diag"></div><canvas id="game" width="360" height="640" tabindex="0"></canvas></div>
+</div><div id="pauseBtn" class="tbtn small warn pauseAboveJoy" data-tap="pause" aria-label="pause">PAUSE</div><div id="joystick" aria-label="move joystick"><div class="label">MOVE</div><div class="base"></div><div class="stick" id="stick"></div></div><div class="actions" aria-hidden="true"><div class="tbtn big gold" id="bombBtn" data-tap="bomb" aria-label="bomb">BOMB</div><div class="tbtn big" id="typeBtn" data-tap="type" aria-label="shot type">TYPE:N</div><div class="tbtn big green" id="focusBtn" data-hold="focus" aria-label="focus">FOCUS</div></div></div><script>
 "use strict";
 
 const cvs = document.getElementById('game');
@@ -93,11 +33,6 @@ const W = 640, H = 360;
 const IS_MOBILE = (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) || ('ontouchstart' in window);
 
 const SE2_MODE = IS_MOBILE && Math.min(screen.width||9999, screen.height||9999) <= 375 && (window.devicePixelRatio||1) >= 2;
-// iPhone SE系ではUI棚を厚めに（CSSのmediaに加えて保険）
-if(typeof SE2_MODE !== 'undefined' && SE2_MODE){
-  document.documentElement.style.setProperty('--uiShelf','220px');
-}
-
 
 let lowQuality = SE2_MODE || IS_MOBILE;
 
@@ -2308,230 +2243,72 @@ function drawOption(o){ ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(time*.08 
 
 function drawEnemy(e){ const color = e.type==='gun' ? '#ffb347' : e.type==='zig' ? '#ff5db1' : e.type==='spray' ? '#72f7ff' : e.type==='mine' ? '#89ff9b' : e.type==='spinner' ? '#9f8cff' : e.type==='sniper' ? '#ffd84d' : e.type==='orb' ? '#ff6262' : '#ff6262'; ctx.save(); ctx.translate(e.x+e.w/2,e.y+e.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 18); ctx.shadowColor=color; ctx.fillStyle=color; if(e.type==='zig'){ ctx.beginPath(); ctx.moveTo(-e.w/2,0); ctx.lineTo(0,-e.h/2); ctx.lineTo(e.w/2,0); ctx.lineTo(0,e.h/2); ctx.closePath(); ctx.fill(); } else if(e.type==='gun'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.clearRect(-4,-4,8,8); } else if(e.type==='spray'){ ctx.beginPath(); for(let i=0;i<6;i++){ const a=i*Math.PI/3; const x=Math.cos(a)*e.w/2; const y=Math.sin(a)*e.h/2; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.closePath(); ctx.fill(); ctx.clearRect(-4,-4,8,8); } else if(e.type==='spinner'){ ctx.beginPath(); ctx.arc(0,0,Math.min(e.w,e.h)*0.42,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=2; for(let i=0;i<4;i++){ const a=i*Math.PI/2 + e.t*0.10; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*e.w*0.46, Math.sin(a)*e.h*0.46); ctx.stroke(); } ctx.fillStyle='rgba(2,6,17,.70)'; ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill(); } else if(e.type==='sniper'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.clearRect(-3,-3,6,6); ctx.strokeStyle='rgba(255,255,255,.60)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-e.w*0.22,0); ctx.lineTo(e.w*0.22,0); ctx.moveTo(0,-e.h*0.22); ctx.lineTo(0,e.h*0.22); ctx.stroke(); } else if(e.type==='orb'){ ctx.beginPath(); ctx.arc(0,0,Math.min(e.w,e.h)*0.48,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(-e.w*0.12,-e.h*0.12,3.5,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(2,6,17,.75)'; ctx.beginPath(); ctx.arc(0,0,5.5,0,Math.PI*2); ctx.fill(); } else if(e.type==='mine'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.fillStyle='rgba(2,6,17,.85)'; ctx.fillRect(-e.w/2+6,-e.h/2+6,e.w-12,e.h-12); } else { ctx.beginPath(); ctx.moveTo(e.w/2,0); ctx.lineTo(0,-e.h/2); ctx.lineTo(-e.w/2,0); ctx.lineTo(0,e.h/2); ctx.closePath(); ctx.fill(); } ctx.restore(); }
 
-function drawBoss(){
- if(!boss) return;
- bossUpdatePartsPos(boss);
- ctx.save();
- ctx.translate(boss.x+boss.w/2,boss.y+boss.h/2);
- ctx.shadowBlur = (IS_MOBILE ? 0 : 28);
- ctx.shadowColor=boss.color;
- const g=ctx.createLinearGradient(-boss.w/2,-boss.h/2,boss.w/2,boss.h/2);
- g.addColorStop(0,'rgba(255,255,255,.92)');
- g.addColorStop(.35,boss.color);
- g.addColorStop(1,'rgba(50,30,80,.65)');
- ctx.fillStyle=g;
- ctx.strokeStyle='rgba(255,255,255,.45)';
- ctx.lineWidth=3;
-
- // 形状フォーム（stage or 変形後shapeForm）
- const st = Math.max(1, Math.min(7, (boss && boss.shapeForm) ? boss.shapeForm : (boss.stage || stage)));
-
- // === NEW BOSS SILHOUETTES (大幅変更) ===
- // ポリゴンを作るヘルパ
- const poly = (pts, close=true)=>{
-   ctx.beginPath();
-   for(let i=0;i<pts.length;i++){
-     const p=pts[i];
-     if(i===0) ctx.moveTo(p[0],p[1]); else ctx.lineTo(p[0],p[1]);
-   }
-   if(close) ctx.closePath();
- };
- const star = (r1,r2,n,rot)=>{
-   const pts=[];
-   for(let i=0;i<n*2;i++){
-     const a = rot + i*Math.PI/n;
-     const r = (i%2===0)?r1:r2;
-     pts.push([Math.cos(a)*r, Math.sin(a)*r]);
-   }
-   return pts;
- };
-
- if(st===1){
-   // ORBIT DRONE: 円＋3フィン＋センターコア
-   const R = Math.min(boss.w,boss.h)*0.44;
-   ctx.beginPath();
-   ctx.arc(0,0,R,0,Math.PI*2);
-   ctx.fill();
-   ctx.stroke();
-   ctx.save();
-   ctx.globalAlpha=.85;
-   ctx.fillStyle='rgba(255,255,255,.75)';
-   for(let i=0;i<3;i++){
-     const a = -Math.PI/2 + i*(Math.PI*2/3);
-     const tip=[Math.cos(a)*(R*1.18), Math.sin(a)*(R*1.18)];
-     const l=[Math.cos(a+0.55)*(R*0.72), Math.sin(a+0.55)*(R*0.72)];
-     const r=[Math.cos(a-0.55)*(R*0.72), Math.sin(a-0.55)*(R*0.72)];
-     poly([tip,l,[0,0],r]);
-     ctx.fill();
-   }
-   ctx.restore();
-   ctx.fillStyle='rgba(2,6,17,.65)';
-   ctx.beginPath(); ctx.arc(0,0,R*0.33,0,Math.PI*2); ctx.fill();
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.beginPath(); ctx.arc(0,0,R*0.10,0,Math.PI*2); ctx.fill();
- }
- else if(st===2){
-   // CRESCENT SERAPH: 三日月＋羽根
-   const R = Math.min(boss.w,boss.h)*0.52;
-   ctx.beginPath();
-   // 外側
-   ctx.arc(0,0,R, -0.95, 0.95);
-   // 内側（逆回り）
-   ctx.arc(R*0.28,0,R*0.72, 0.95, -0.95, true);
-   ctx.closePath();
-   ctx.fill();
-   ctx.stroke();
-   ctx.save();
-   ctx.globalAlpha=.78;
-   ctx.fillStyle='rgba(255,255,255,.70)';
-   // 左右の羽
-   poly([[-R*0.90,-R*0.12],[-R*0.20,-R*0.36],[-R*0.12,0],[-R*0.20,R*0.36],[-R*0.90,R*0.12]]);
-   ctx.fill();
-   poly([[R*0.40,-R*0.10],[R*0.94,-R*0.34],[R*0.56,0],[R*0.94,R*0.34],[R*0.40,R*0.10]]);
-   ctx.fill();
-   ctx.restore();
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.fillRect(-R*0.10,-2,R*0.26,4);
- }
- else if(st===3){
-   // TWIN MONOLITH: 縦ツイン柱（くびれ）
-   const w = boss.w*0.54;
-   const h = boss.h*0.84;
-   const r = Math.min(w,h)*0.16;
-   // 左柱
-   roundRect(-w*0.62,-h*0.50,w*0.52,h, r, true, true);
-   // 右柱
-   roundRect(w*0.10,-h*0.50,w*0.52,h, r, true, true);
-   // くびれリンク
-   ctx.save();
-   ctx.globalAlpha=.75;
-   ctx.fillStyle='rgba(255,255,255,.25)';
-   roundRect(-w*0.16,-h*0.12,w*0.32,h*0.24, 999, true, false);
-   ctx.restore();
-   // コア
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.beginPath(); ctx.ellipse(0,0,w*0.18,h*0.10,0,0,Math.PI*2); ctx.fill();
- }
- else if(st===4){
-   // TRIPLE HALO: 3リング＋センター
-   const rx = boss.w*0.52, ry = boss.h*0.34;
-   for(let i=0;i<3;i++){
-     ctx.save();
-     ctx.globalAlpha = 0.92 - i*0.18;
-     ctx.beginPath();
-     ctx.ellipse(0,0, rx - i*16, ry - i*10, (i-1)*0.18, 0, Math.PI*2);
-     ctx.fill();
-     ctx.stroke();
-     ctx.restore();
-   }
-   ctx.save();
-   ctx.globalCompositeOperation = 'destination-out';
-   ctx.beginPath();
-   ctx.ellipse(0,0, rx*0.38, ry*0.38, 0, 0, Math.PI*2);
-   ctx.fill();
-   ctx.restore();
-   ctx.save();
-   ctx.globalAlpha=.9;
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.beginPath(); ctx.arc(0,0, Math.min(rx,ry)*0.22, 0, Math.PI*2); ctx.fill();
-   ctx.restore();
- }
- else if(st===5){
-   // NOVA STAR: 大型スター＋外周フレーム
-   const R1 = Math.min(boss.w,boss.h)*0.54;
-   const pts = star(R1, R1*0.46, 5, -Math.PI/2);
-   poly(pts);
-   ctx.fill();
-   ctx.stroke();
-   ctx.save();
-   ctx.globalAlpha=.35;
-   ctx.strokeStyle='rgba(255,255,255,.55)';
-   ctx.lineWidth=2;
-   const pts2 = star(R1*0.80, R1*0.36, 5, -Math.PI/2);
-   poly(pts2);
-   ctx.stroke();
-   ctx.restore();
-   ctx.fillStyle='rgba(2,6,17,.62)';
-   ctx.beginPath(); ctx.arc(0,0,R1*0.22,0,Math.PI*2); ctx.fill();
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.fillRect(-R1*0.12,-3,R1*0.24,6);
- }
- else if(st===6){
-   // HEX SPIKE: 六角＋スパイク
-   const R = Math.min(boss.w,boss.h)*0.52;
-   const pts=[];
-   for(let i=0;i<12;i++){
-     const a = -Math.PI/2 + i*(Math.PI/6);
-     const rr = (i%2===0)?R:(R*0.70);
-     pts.push([Math.cos(a)*rr, Math.sin(a)*rr]);
-   }
-   poly(pts);
-   ctx.fill();
-   ctx.stroke();
-   ctx.save();
-   ctx.globalAlpha=.75;
-   ctx.fillStyle='rgba(255,255,255,.22)';
-   ctx.beginPath();
-   ctx.ellipse(0,0,R*0.38,R*0.22,0.22,0,Math.PI*2);
-   ctx.fill();
-   ctx.restore();
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.beginPath(); ctx.arc(-R*0.06,0,R*0.10,0,Math.PI*2); ctx.fill();
- }
- else {
-   // PRISM OVERDRIVE: 多層ダイヤ＋サイドブレード
-   const R = Math.min(boss.w,boss.h)*0.58;
-   const diamond = (rx,ry)=>[[0,-ry],[rx,0],[0,ry],[-rx,0]];
-   ctx.save();
-   ctx.globalAlpha=.95;
-   poly(diamond(R*0.78,R*0.50)); ctx.fill(); ctx.stroke();
-   ctx.globalAlpha=.65;
-   poly(diamond(R*0.56,R*0.36)); ctx.stroke();
-   ctx.globalAlpha=.35;
-   poly(diamond(R*0.36,R*0.22)); ctx.stroke();
-   ctx.restore();
-   ctx.save();
-   ctx.globalAlpha=.82;
-   ctx.fillStyle='rgba(255,255,255,.70)';
-   poly([[R*0.72,-R*0.10],[R*1.10,0],[R*0.72,R*0.10],[R*0.52,0]]); ctx.fill();
-   poly([[-R*0.72,-R*0.10],[-R*1.10,0],[-R*0.72,R*0.10],[-R*0.52,0]]); ctx.fill();
-   ctx.restore();
-   ctx.fillStyle='rgba(255,255,255,.92)';
-   ctx.beginPath(); ctx.arc(0,0,R*0.12,0,Math.PI*2); ctx.fill();
- }
+function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx.translate(boss.x+boss.w/2,boss.y+boss.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 28); ctx.shadowColor=boss.color; const g=ctx.createLinearGradient(-boss.w/2,-boss.h/2,boss.w/2,boss.h/2); g.addColorStop(0,'rgba(255,255,255,.92)'); g.addColorStop(.35,boss.color); g.addColorStop(1,'rgba(50,30,80,.65)'); ctx.fillStyle=g; ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=3; const st = Math.max(1, Math.min(7, (boss && boss.shapeForm) ? boss.shapeForm : (boss.stage || stage))); if(st===1){ ctx.beginPath(); ctx.moveTo(boss.w/2,0); ctx.lineTo(boss.w*0.08,-boss.h*0.46); ctx.lineTo(-boss.w*0.34,-boss.h*0.24); ctx.lineTo(-boss.w/2,0); ctx.lineTo(-boss.w*0.34,boss.h*0.24); ctx.lineTo(boss.w*0.08,boss.h*0.46); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillRect(-boss.w*.15,-5,boss.w*.30,10); } else if(st===2){ ctx.beginPath(); ctx.moveTo(boss.w*0.44,0); ctx.lineTo(boss.w*0.18,-boss.h*0.46); ctx.lineTo(-boss.w*0.08,-boss.h*0.22); ctx.lineTo(-boss.w*0.42,-boss.h*0.40); ctx.lineTo(-boss.w*0.48,0); ctx.lineTo(-boss.w*0.42,boss.h*0.40); ctx.lineTo(-boss.w*0.08,boss.h*0.22); ctx.lineTo(boss.w*0.18,boss.h*0.46); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-boss.w*0.04,-boss.h*0.15); ctx.lineTo(boss.w*0.16,0); ctx.lineTo(-boss.w*0.04,boss.h*0.15); ctx.closePath(); ctx.fillStyle='rgba(255,255,255,.82)'; ctx.fill(); } else if(st===3){ ctx.beginPath(); for(let i=0;i<6;i++){ const a = -Math.PI/2 + i*Math.PI/3; const rr = (i%2===0)? boss.w*0.50 : boss.w*0.28; const x = Math.cos(a)*rr; const y = Math.sin(a)*(boss.h*0.46); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.90)'; ctx.fillRect(-boss.w*0.18,-boss.h*0.07,boss.w*0.36,boss.h*0.14); } else if(st===4){ ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.bezierCurveTo(boss.w*0.24,-boss.h*0.54,-boss.w*0.04,-boss.h*0.52,-boss.w*0.16,-boss.h*0.18); ctx.lineTo(-boss.w*0.42,-boss.h*0.36); ctx.lineTo(-boss.w*0.50,0); ctx.lineTo(-boss.w*0.42,boss.h*0.36); ctx.lineTo(-boss.w*0.16,boss.h*0.18); ctx.bezierCurveTo(-boss.w*0.04,boss.h*0.52,boss.w*0.24,boss.h*0.54,boss.w*0.48,0); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(-boss.w*0.02,0,boss.h*0.10,0,Math.PI*2); ctx.fill(); } else if(st===5){ ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.lineTo(boss.w*0.22,-boss.h*0.50); ctx.lineTo(-boss.w*0.02,-boss.h*0.18); ctx.lineTo(-boss.w*0.18,-boss.h*0.50); ctx.lineTo(-boss.w*0.48,-boss.h*0.18); ctx.lineTo(-boss.w*0.40,0); ctx.lineTo(-boss.w*0.48,boss.h*0.18); ctx.lineTo(-boss.w*0.18,boss.h*0.50); ctx.lineTo(-boss.w*0.02,boss.h*0.18); ctx.lineTo(boss.w*0.22,boss.h*0.50); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.92)'; ctx.fillRect(-boss.w*0.14,-boss.h*0.20,boss.w*0.12,boss.h*0.40); ctx.fillRect(boss.w*0.02,-boss.h*0.20,boss.w*0.12,boss.h*0.40); } else { ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.lineTo(boss.w*0.26,-boss.h*0.54); ctx.lineTo(boss.w*0.10,-boss.h*0.18); ctx.lineTo(-boss.w*0.02,-boss.h*0.58); ctx.lineTo(-boss.w*0.14,-boss.h*0.18); ctx.lineTo(-boss.w*0.32,-boss.h*0.50); ctx.lineTo(-boss.w*0.50,0); ctx.lineTo(-boss.w*0.32,boss.h*0.50); ctx.lineTo(-boss.w*0.14,boss.h*0.18); ctx.lineTo(-boss.w*0.02,boss.h*0.58); ctx.lineTo(boss.w*0.10,boss.h*0.18); ctx.lineTo(boss.w*0.26,boss.h*0.54); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(-boss.w*0.02,0,boss.h*0.09,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(boss.w*0.08,0); ctx.lineTo(boss.w*0.26,-boss.h*0.10); ctx.lineTo(boss.w*0.26,boss.h*0.10); ctx.closePath(); ctx.fill(); } 
 
  ctx.restore();
 
- // 既存のパーツ表示（矩形パーツ + HPバー）はそのまま
+
  if(boss.parts){
+
   for(const p of boss.parts){
+
    if(!p || !p.alive || p.hp<=0) continue;
+
    const col = boss.color || '#72f7ff';
+
+
    ctx.save();
+
    ctx.shadowBlur = (IS_MOBILE ? 0 : 10);
+
    ctx.shadowColor = col;
+
    ctx.lineWidth = 1.5;
+
    ctx.strokeStyle = 'rgba(255,255,255,.18)';
+
    ctx.fillStyle = col;
+
    ctx.globalAlpha = 0.22;
+
    roundRect(p.x, p.y, p.w, p.h, 10, true, true);
+
+
    ctx.globalAlpha = 0.18;
+
    ctx.fillStyle = 'rgba(255,255,255,.22)';
+
    roundRect(p.x+3, p.y+3, Math.max(0,p.w-6), Math.min(6, Math.max(0,p.h-6)), 8, true, false);
+
+
    const r = Math.max(0, Math.min(1, p.hp / (p.maxHP||1)));
+
    const bx = p.x + 2;
+
    const by = p.y - 6;
+
    const bw = Math.max(1, p.w - 4);
+
    const bh = 3;
+
    ctx.globalAlpha = 0.75;
+
    ctx.fillStyle = 'rgba(255,255,255,.08)';
+
    roundRect(bx, by, bw, bh, 999, true, false);
+
    ctx.fillStyle = col;
+
    roundRect(bx, by, Math.max(0.5, bw*r), bh, 999, true, false);
+
    ctx.restore();
+
   }
+
  }
-}
+
+ }
+
 function drawBullet(b){
   ctx.save();
   const heavyBulletLoad = (IS_MOBILE && b.enemy) || (b.enemy && enemyBullets && enemyBullets.length > BULLET_SOFTCAP);
