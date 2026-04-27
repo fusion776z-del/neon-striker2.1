@@ -29,13 +29,13 @@ body{
 }
 
 
-/* === 画面拡大: 操作説明（caption）を消して、iPhone SE系はゲーム面を少し大きく === */
+/* === 画面拡大: 操作説明（caption）を消して、iPhone SE系はゲーム面を最大化 === */
 .caption{display:none !important; margin-top:0 !important;}
 
 :root{ --gameVW: 92vw; --gameVH: 92vh; }
-/* iPhone SE/8系では少し攻める（棚は維持） */
+/* iPhone SE/8系では100/100で最大（棚は維持） */
 @media (pointer:coarse) and (max-width: 390px){
-  :root{ --gameVW: 98vw; --gameVH: 98vh; }
+  :root{ --gameVW: 100vw; --gameVH: 100vh; }
 }
 
 /* 既存#game指定を上書き */
@@ -43,12 +43,12 @@ body{
   width: min(var(--gameVW), calc((var(--gameVH) - var(--uiShelf)) * 9 / 16)) !important;
 }
 
-/* 余白も少し削って有効面積を稼ぐ */
+/* 余白も削って有効面積を稼ぐ */
 body{
-  padding-top: 8px !important;
-  padding-bottom: calc(var(--uiShelf) + env(safe-area-inset-bottom) + 8px) !important;
+  padding-top: 6px !important;
+  padding-bottom: calc(var(--uiShelf) + env(safe-area-inset-bottom) + 6px) !important;
 }
-.frame{ padding: 10px !important; }
+.frame{ padding: 8px !important; }
 </style></head><body><div class="frame"><div class="diag" id="diag"></div><canvas id="game" width="360" height="640" tabindex="0"></canvas></div><div id="pauseBtn" class="tbtn small warn pauseAboveJoy" data-tap="pause" aria-label="pause">PAUSE</div><div id="joystick" aria-label="move joystick"><div class="label">MOVE</div><div class="base"></div><div class="stick" id="stick"></div></div><div class="actions" aria-hidden="true"><div class="tbtn big gold" id="bombBtn" data-tap="bomb" aria-label="bomb">BOMB</div><div class="tbtn big" id="typeBtn" data-tap="type" aria-label="shot type">TYPE:N</div><div class="tbtn big green" id="focusBtn" data-hold="focus" aria-label="focus">FOCUS</div></div><div class="caption"><span class="pill">MOVE ←↑↓→ / SHOT Z / LASER X / BOMB C / FOCUS Shift / PAUSE Space / START Z / BGM: STAGE x7 OVERDRIVE (SUBBASS HEAVY)</span></div></div><script>
 "use strict";
 
