@@ -2474,7 +2474,7 @@ function drawEnemyLaser(l){
  const col = charging ? (l.colorWarn||'#ffd84d') : (l.colorFire||l.color||'#ff6262');
  let w;
  if(charging){
-  w = thin ? (l.teleW!=null? l.teleW : 1.8) : Math.max(3, ((l.w||24)*0.22));
+  w = thin ? (l.teleW!=null? l.teleW : 2.0) : Math.max(3, ((l.w||24)*0.22));
  } else {
   w = (l.w||24);
   if(l.appearFrames!=null){
@@ -2487,9 +2487,9 @@ function drawEnemyLaser(l){
  }
  let alpha;
  if(charging){
-  alpha = (l.teleAlpha!=null? l.teleAlpha : (thin?0.32:0.55));
+  alpha = (l.teleAlpha!=null? l.teleAlpha : (thin?0.38:0.55));
  } else {
-  const base = (l.fireAlpha!=null? l.fireAlpha : 0.95);
+  const base = (l.fireAlpha!=null? l.fireAlpha : 0.98);
   const endFade = clamp(l.life / 12, 0, 1);
   if(l.appearFrames!=null){
    const fireAge = Math.max(0, (l.maxLife - l.life) - (l.delay0||0));
@@ -2906,7 +2906,7 @@ if(input.shot){
 
    const py = p.y + p.h/2;
 
-   // hitbox scale down (少し小さく)
+   // hitbox scale down (少し小さく) + 角度付きレーザー対応
  const hitR = (((l.w||24)*0.50) + 2) * 0.85;
  if(l.dx!=null && l.dy!=null){
    const d = _distPointSeg(p.x + p.w/2, p.y + p.h/2, l.x1, l.y1, l.x2, l.y2);
@@ -2937,20 +2937,28 @@ if(input.shot){
 
  const ampX = Math.min(84, 22 + stage*10 + (boss.phase||1)*6);
 
- boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
+ if(boss.laserHold && boss.laserHold>0){
+  boss.laserHold--;
+  // 停止（その場で溜め→発射）
+} else {
+  boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
+  boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
+  boss.muzzleX = null; boss.stopX = null; boss.stopY = null;
+}
 
- boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
-
- boss.x = clamp(boss.x, W*0.55, W - boss.w - 18); if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
- // === PRISM_TRIDENT_V5_1: 停止位置と発射原点を一致（muzzleX固定）/ 狙わない / 移動→停止→溜め→発射→移動 ===
- const stgBoss = (boss.stage||stage);
- if((stgBoss===7 && boss.phase>=2) || (stgBoss===6 && boss.phase>=2)){
+ if(!(boss.laserHold && boss.laserHold>0)){ boss.x = clamp(boss.x, W*0.55, W - boss.w - 18); } if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
+ // === LASER_CYCLE_V6: STG7は常に3本→3本… / STG6は1本→1本…（狙わない/停止→溜め→発射→移動） ===
+ const stgBoss2 = (boss.stage||stage);
+ const isLaserBoss = ((stgBoss2===7 && boss.phase>=2) || (stgBoss2===6 && boss.phase>=2));
+ if(isLaserBoss){
+  // 停止中はCDを進めない（移動→停止→溜め→発射→移動が崩れない）
   if(!boss.laserHold || boss.laserHold<=0){
    const CD = 180; // 3秒(60fps)
-   const key = (stgBoss===7) ? 'tridentCD' : 'laserCD';
-   boss[key] = (boss[key]==null? CD : boss[key]) - 1;
-   if(boss[key] <= 0){
-    boss[key] = CD;
+   const cdKey = (stgBoss2===7) ? 'tridentCD' : 'laserCD';
+   boss[cdKey] = (boss[cdKey]==null? CD : boss[cdKey]) - 1;
+   if(boss[cdKey] <= 0){
+    boss[cdKey] = CD;
+
     const L = 900;
     const ang = Math.PI/6; // 30°
     const dxC = -1, dyC = 0;
@@ -2962,27 +2970,35 @@ if(input.shot){
     const appearFrames = 60;
     const warn = 'rgba(255,255,255,0.55)';
 
-    // 発射原点（ボスの前縁寄り）を固定
-    boss.muzzleX = boss.x + boss.w*0.04;
+    // ここで「停止位置」を確定して固定（後の clamp でズレないように）
+    const stopX = clamp(boss.x, W*0.55, W - boss.w - 18);
+    const stopY = boss.y;
+    boss.stopX = stopX; boss.stopY = stopY;
+    boss.x = stopX; boss.y = stopY;
+
+    // 発射原点（ボス前縁寄り）を停止位置で固定
+    boss.muzzleX = boss.stopX + boss.w*0.04;
     const x0 = boss.muzzleX;
 
-    // 狙わない：固定レーンを順番
+    // 狙わない：固定レーン巡回
     const lanes7 = [H*0.20, H*0.36, H*0.50, H*0.64, H*0.80];
     const lanes6 = [H*0.28, H*0.50, H*0.72];
-    const lanes = (stgBoss===7) ? lanes7 : lanes6;
+    const lanes = (stgBoss2===7) ? lanes7 : lanes6;
     boss.laserLane = (boss.laserLane==null? 0 : (boss.laserLane+1)%lanes.length);
     const baseY = clamp(lanes[boss.laserLane], 16, H-16);
 
     // 停止（溜め+発射）
     boss.laserHold = totalLife;
 
-    if(stgBoss===6){
+    if(stgBoss2===6){
+      // STG6: 1本だけ
       enemyLasers.push({x1:x0, y1:baseY, x2:x0 + dxC*L, y2:baseY + dyC*L, dx:dxC, dy:dyC, len:L,
         w:26, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
-        telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+        telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
         colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:baseY});
     } else {
+      // STG7: 常に3本（中心+左右±30°）。左右も同じ太さで見えやすく。
       const sep = (boss.phase>=4? 54 : 46);
       const offs = [0, -sep, sep];
       for(let i=0;i<3;i++){
@@ -2990,24 +3006,28 @@ if(input.shot){
         if(i===0){
           enemyLasers.push({x1:x0, y1:yy, x2:x0 + dxC*L, y2:yy + dyC*L, dx:dxC, dy:dyC, len:L,
             w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
-            telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+            telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
             colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
         } else {
           const sgn = (i===1? -1 : 1);
           enemyLasers.push({x1:x0, y1:yy, x2:x0 + dx*L, y2:yy + (sgn*dy)*L, dx:dx, dy:(sgn*dy), len:L,
-            w:22, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
-            telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+            w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+            telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
             colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
         }
       }
     }
+
     beep('sawtooth', 90, 48, 0.35, 0.09);
     beep('triangle', 220, 110, 0.25, 0.05);
    }
   }
  }
+
+ // [FINAL_TRIDENT_ALWAYS3 replaced]
+ 
 
 
 
@@ -3044,7 +3064,7 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
  // 部位が残っていてもカウントを進め、一定間隔で3本レーザーを発動
  boss.coreShot = (boss.coreShot||0) + 1;
  let didTrident = false;
- const doTrident = false; // replaced by non-aim laser cycle
+ const doTrident = false; // replaced by ALWAYS TRIDENT cycle
  if(doTrident){
   // === PRISM_TRIDENT: 3本同時・追尾→ロックレーザー（STAGE7専用 / phase>=2） ===
   const hb = getPlayerHitbox();
@@ -3178,7 +3198,7 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
 
  const FINAL_LASER_INTERVAL = 120; 
 
- const doLaser = stg7 && phase >= 3 && (boss.coreShot >= FINAL_LASER_INTERVAL);
+ const doLaser = false; // replaced by ALWAYS TRIDENT cycle
  if(doLaser && !didTrident){
 
  const p = getPlayerHitbox();
