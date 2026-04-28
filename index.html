@@ -3350,7 +3350,34 @@ if(hitTerrainRect(b.x,b.y,b.w,b.h)){ addBurst(b.x+b.w/2,b.y+b.h/2,'#ffb347',3,.9
 
   if(hitByBullet || hitByEnemyLaser || collidedWithEnemy || collidedWithBoss){ safeLoseLife(); if(state !== 'play') return; }
 
-  for(let i=powerups.length-1;i>=0;i--){ const p=powerups[i]; p.x -= 2.1; p.y += Math.sin((time+i*22)*.08)*.75; if(Math.hypot(player.x-p.x, player.y-p.y) < 22){ capsuleCount++;
+  for(let i=powerups.length-1;i>=0;i--){ const p=powerups[i]; p.x -= 2.1; p.y += Math.sin((time+i*22)*.08)*.75;
+ // === RIPPLE MAGNET: リップルリングに触れたカプセルは自機へ吸い寄せ ===
+ // 条件: TYPE:R(shotType===2) かつ いずれかのリップル弾の半径内(少し余裕)に入ったら吸引フラグON
+ if(!p._mag && shotType===2 && bullets && bullets.length){
+  for(const b of bullets){
+   if(!b || !b.ripple) continue;
+   const cx = b.x + ((b.w||14)/2);
+   const cy = b.y + ((b.h||14)/2);
+   const r  = ((b.w||14)/2) + 10; // 余裕ぶん
+   const dx = p.x - cx, dy = p.y - cy;
+   if(dx*dx + dy*dy <= r*r){ p._mag = 1; break; }
+  }
+ }
+ // 吸引中: 自機中心へ一定速度で吸い寄せ（自然に『吸い込まれる』感じ）
+ if(p._mag && player){
+  const tx = player.x + 13;
+  const ty = player.y + 9;
+  const ax = tx - p.x;
+  const ay = ty - p.y;
+  const len = Math.hypot(ax, ay) || 1;
+  const spd = (input && input.focus) ? 6.4 : 7.6;
+  // 近いほど減速（最後にスッと収束）
+  const near = Math.min(1, len/120);
+  const v = spd * (0.25 + 0.75*near);
+  p.x += (ax/len) * v;
+  p.y += (ay/len) * v;
+ }
+ if(Math.hypot(player.x-p.x, player.y-p.y) < 22){ capsuleCount++;
 
   score += 80;
 
