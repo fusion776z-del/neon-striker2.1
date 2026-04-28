@@ -5,18 +5,14 @@
 #typeBtn.green{border-color:rgba(137,255,155,.28) !important;background:rgba(137,255,155,.12) !important;}
 
 
-/* === WRAP_SCALE_0_81: 画面(キャンバス枠)を全体的に10%小さく === */
+/* === WRAP_SCALE_0_9: 画面(キャンバス枠)を全体的に10%小さく === */
 .wrap{display:grid;place-items:center;}
-.wrap{transform:scale(0.81);transform-origin:top center;}
+.wrap{transform:scale(0.9);transform-origin:top center;}
 /* タッチ端末では少し下に寄せて見切れ防止 */
 @media (pointer:coarse){
-  .wrap{transform:translateY(10px) scale(0.81);} 
-/* caption(操作説明)はカット */
-.caption{display:none !important;}
-
+  .wrap{transform:translateY(10px) scale(0.9);} 
 }
-</style></head><body><div class="frame"><div class="diag" id="diag"></div><canvas id="game" width="360" height="640" tabindex="0"></canvas></div>
-</div><div id="pauseBtn" class="tbtn small warn pauseAboveJoy" data-tap="pause" aria-label="pause">PAUSE</div><div id="joystick" aria-label="move joystick"><div class="label">MOVE</div><div class="base"></div><div class="stick" id="stick"></div></div><div class="actions" aria-hidden="true"><div class="tbtn big gold" id="bombBtn" data-tap="bomb" aria-label="bomb">BOMB</div><div class="tbtn big" id="typeBtn" data-tap="type" aria-label="shot type">TYPE:N</div><div class="tbtn big green" id="focusBtn" data-hold="focus" aria-label="focus">FOCUS</div></div></div><script>
+</style></head><body><div class="frame"><div class="diag" id="diag"></div><canvas id="game" width="360" height="640" tabindex="0"></canvas></div><div id="pauseBtn" class="tbtn small warn pauseAboveJoy" data-tap="pause" aria-label="pause">PAUSE</div><div id="joystick" aria-label="move joystick"><div class="label">MOVE</div><div class="base"></div><div class="stick" id="stick"></div></div><div class="actions" aria-hidden="true"><div class="tbtn big gold" id="bombBtn" data-tap="bomb" aria-label="bomb">BOMB</div><div class="tbtn big" id="typeBtn" data-tap="type" aria-label="shot type">TYPE:N</div><div class="tbtn big green" id="focusBtn" data-hold="focus" aria-label="focus">FOCUS</div></div><div class="caption"><span class="pill">MOVE ←↑↓→ / SHOT Z / LASER X / BOMB C / FOCUS Shift / PAUSE Space / START Z / BGM: STAGE x7 OVERDRIVE (SUBBASS HEAVY)</span></div></div><script>
 "use strict";
 
 const cvs = document.getElementById('game');
@@ -80,6 +76,8 @@ const BOSS_ATTACK_TEMPLATE = 1;
 
 
 const BOSS_EXTRAS_ENABLED = false;
+const BOSS_SIZE_SCALE = 1.25; // 各ボス巨大化
+
 
 
 function bossCount(n){
@@ -2086,6 +2084,7 @@ function createBoss(){
  const BASE_W = 150;
 
  const BASE_H = 120;
+ const BOSS_S = (typeof BOSS_SIZE_SCALE==='number' ? BOSS_SIZE_SCALE : 1.25);
 
  const coreHP = t.hp;
 
@@ -2104,7 +2103,25 @@ const parts = [
  {id:'XR2', kind:'turret', color:t.color, relX:BASE_W-18-32,     relY:94, w:32, h:20, hp:wingHP, maxHP:wingHP, alive:true, shot:25}
 ];
 
- return {x:W+BASE_W+20,y:H/2-BASE_H/2,w:BASE_W,h:BASE_H,
+// === PART_GROW_FROM_STAGE4: 4ステージ以降、ステージが進むたびに部位+1 ===
+// stage4: +0 / stage5:+1 / stage6:+2 / stage7:+3
+const extraCount = Math.max(0, (stage|0) - 4);
+for(let i=0;i<extraCount;i++){
+  const w=30, h=18;
+  const side = (i%2===0) ? 'L' : 'R';
+  const relX = (side==='L') ? (14) : (BASE_W - 14 - w);
+  const relY = Math.min(BASE_H - h - 8, 58 + i*14);
+  const id = 'EX' + (i+1);
+  parts.push({id, kind:'turret', color:t.color, relX, relY, w, h, hp:wingHP, maxHP:wingHP, alive:true, shot: 20 + i*2});
+}
+// === 各ボス巨大化: 本体と部位を同倍率で拡大 ===
+for(const p of parts){
+  p.relX *= BOSS_S; p.relY *= BOSS_S;
+  p.w *= BOSS_S; p.h *= BOSS_S;
+}
+
+
+ return {x:W+(BASE_W*BOSS_S)+20,y:H/2-(BASE_H*BOSS_S)/2,w:(BASE_W*BOSS_S),h:(BASE_H*BOSS_S),
 
   hp:coreHP,maxHP:coreHP,name:t.name,color:t.color,entering:true,t:0,
 
@@ -2243,7 +2260,77 @@ function drawOption(o){ ctx.save(); ctx.translate(o.x,o.y); ctx.rotate(time*.08 
 
 function drawEnemy(e){ const color = e.type==='gun' ? '#ffb347' : e.type==='zig' ? '#ff5db1' : e.type==='spray' ? '#72f7ff' : e.type==='mine' ? '#89ff9b' : e.type==='spinner' ? '#9f8cff' : e.type==='sniper' ? '#ffd84d' : e.type==='orb' ? '#ff6262' : '#ff6262'; ctx.save(); ctx.translate(e.x+e.w/2,e.y+e.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 18); ctx.shadowColor=color; ctx.fillStyle=color; if(e.type==='zig'){ ctx.beginPath(); ctx.moveTo(-e.w/2,0); ctx.lineTo(0,-e.h/2); ctx.lineTo(e.w/2,0); ctx.lineTo(0,e.h/2); ctx.closePath(); ctx.fill(); } else if(e.type==='gun'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.clearRect(-4,-4,8,8); } else if(e.type==='spray'){ ctx.beginPath(); for(let i=0;i<6;i++){ const a=i*Math.PI/3; const x=Math.cos(a)*e.w/2; const y=Math.sin(a)*e.h/2; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.closePath(); ctx.fill(); ctx.clearRect(-4,-4,8,8); } else if(e.type==='spinner'){ ctx.beginPath(); ctx.arc(0,0,Math.min(e.w,e.h)*0.42,0,Math.PI*2); ctx.fill(); ctx.strokeStyle='rgba(255,255,255,.55)'; ctx.lineWidth=2; for(let i=0;i<4;i++){ const a=i*Math.PI/2 + e.t*0.10; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*e.w*0.46, Math.sin(a)*e.h*0.46); ctx.stroke(); } ctx.fillStyle='rgba(2,6,17,.70)'; ctx.beginPath(); ctx.arc(0,0,3.5,0,Math.PI*2); ctx.fill(); } else if(e.type==='sniper'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.clearRect(-3,-3,6,6); ctx.strokeStyle='rgba(255,255,255,.60)'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(-e.w*0.22,0); ctx.lineTo(e.w*0.22,0); ctx.moveTo(0,-e.h*0.22); ctx.lineTo(0,e.h*0.22); ctx.stroke(); } else if(e.type==='orb'){ ctx.beginPath(); ctx.arc(0,0,Math.min(e.w,e.h)*0.48,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(255,255,255,.55)'; ctx.beginPath(); ctx.arc(-e.w*0.12,-e.h*0.12,3.5,0,Math.PI*2); ctx.fill(); ctx.fillStyle='rgba(2,6,17,.75)'; ctx.beginPath(); ctx.arc(0,0,5.5,0,Math.PI*2); ctx.fill(); } else if(e.type==='mine'){ ctx.fillRect(-e.w/2,-e.h/2,e.w,e.h); ctx.fillStyle='rgba(2,6,17,.85)'; ctx.fillRect(-e.w/2+6,-e.h/2+6,e.w-12,e.h-12); } else { ctx.beginPath(); ctx.moveTo(e.w/2,0); ctx.lineTo(0,-e.h/2); ctx.lineTo(-e.w/2,0); ctx.lineTo(0,e.h/2); ctx.closePath(); ctx.fill(); } ctx.restore(); }
 
-function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx.translate(boss.x+boss.w/2,boss.y+boss.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 28); ctx.shadowColor=boss.color; const g=ctx.createLinearGradient(-boss.w/2,-boss.h/2,boss.w/2,boss.h/2); g.addColorStop(0,'rgba(255,255,255,.92)'); g.addColorStop(.35,boss.color); g.addColorStop(1,'rgba(50,30,80,.65)'); ctx.fillStyle=g; ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=3; const st = Math.max(1, Math.min(7, (boss && boss.shapeForm) ? boss.shapeForm : (boss.stage || stage))); if(st===1){ ctx.beginPath(); ctx.moveTo(boss.w/2,0); ctx.lineTo(boss.w*0.08,-boss.h*0.46); ctx.lineTo(-boss.w*0.34,-boss.h*0.24); ctx.lineTo(-boss.w/2,0); ctx.lineTo(-boss.w*0.34,boss.h*0.24); ctx.lineTo(boss.w*0.08,boss.h*0.46); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.95)'; ctx.fillRect(-boss.w*.15,-5,boss.w*.30,10); } else if(st===2){ ctx.beginPath(); ctx.moveTo(boss.w*0.44,0); ctx.lineTo(boss.w*0.18,-boss.h*0.46); ctx.lineTo(-boss.w*0.08,-boss.h*0.22); ctx.lineTo(-boss.w*0.42,-boss.h*0.40); ctx.lineTo(-boss.w*0.48,0); ctx.lineTo(-boss.w*0.42,boss.h*0.40); ctx.lineTo(-boss.w*0.08,boss.h*0.22); ctx.lineTo(boss.w*0.18,boss.h*0.46); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-boss.w*0.04,-boss.h*0.15); ctx.lineTo(boss.w*0.16,0); ctx.lineTo(-boss.w*0.04,boss.h*0.15); ctx.closePath(); ctx.fillStyle='rgba(255,255,255,.82)'; ctx.fill(); } else if(st===3){ ctx.beginPath(); for(let i=0;i<6;i++){ const a = -Math.PI/2 + i*Math.PI/3; const rr = (i%2===0)? boss.w*0.50 : boss.w*0.28; const x = Math.cos(a)*rr; const y = Math.sin(a)*(boss.h*0.46); if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); } ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.90)'; ctx.fillRect(-boss.w*0.18,-boss.h*0.07,boss.w*0.36,boss.h*0.14); } else if(st===4){ ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.bezierCurveTo(boss.w*0.24,-boss.h*0.54,-boss.w*0.04,-boss.h*0.52,-boss.w*0.16,-boss.h*0.18); ctx.lineTo(-boss.w*0.42,-boss.h*0.36); ctx.lineTo(-boss.w*0.50,0); ctx.lineTo(-boss.w*0.42,boss.h*0.36); ctx.lineTo(-boss.w*0.16,boss.h*0.18); ctx.bezierCurveTo(-boss.w*0.04,boss.h*0.52,boss.w*0.24,boss.h*0.54,boss.w*0.48,0); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.85)'; ctx.beginPath(); ctx.arc(-boss.w*0.02,0,boss.h*0.10,0,Math.PI*2); ctx.fill(); } else if(st===5){ ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.lineTo(boss.w*0.22,-boss.h*0.50); ctx.lineTo(-boss.w*0.02,-boss.h*0.18); ctx.lineTo(-boss.w*0.18,-boss.h*0.50); ctx.lineTo(-boss.w*0.48,-boss.h*0.18); ctx.lineTo(-boss.w*0.40,0); ctx.lineTo(-boss.w*0.48,boss.h*0.18); ctx.lineTo(-boss.w*0.18,boss.h*0.50); ctx.lineTo(-boss.w*0.02,boss.h*0.18); ctx.lineTo(boss.w*0.22,boss.h*0.50); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.92)'; ctx.fillRect(-boss.w*0.14,-boss.h*0.20,boss.w*0.12,boss.h*0.40); ctx.fillRect(boss.w*0.02,-boss.h*0.20,boss.w*0.12,boss.h*0.40); } else { ctx.beginPath(); ctx.moveTo(boss.w*0.48,0); ctx.lineTo(boss.w*0.26,-boss.h*0.54); ctx.lineTo(boss.w*0.10,-boss.h*0.18); ctx.lineTo(-boss.w*0.02,-boss.h*0.58); ctx.lineTo(-boss.w*0.14,-boss.h*0.18); ctx.lineTo(-boss.w*0.32,-boss.h*0.50); ctx.lineTo(-boss.w*0.50,0); ctx.lineTo(-boss.w*0.32,boss.h*0.50); ctx.lineTo(-boss.w*0.14,boss.h*0.18); ctx.lineTo(-boss.w*0.02,boss.h*0.58); ctx.lineTo(boss.w*0.10,boss.h*0.18); ctx.lineTo(boss.w*0.26,boss.h*0.54); ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.fillStyle='rgba(255,255,255,.92)'; ctx.beginPath(); ctx.arc(-boss.w*0.02,0,boss.h*0.09,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.moveTo(boss.w*0.08,0); ctx.lineTo(boss.w*0.26,-boss.h*0.10); ctx.lineTo(boss.w*0.26,boss.h*0.10); ctx.closePath(); ctx.fill(); } 
+function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx.translate(boss.x+boss.w/2,boss.y+boss.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 28); ctx.shadowColor=boss.color; const g=ctx.createLinearGradient(-boss.w/2,-boss.h/2,boss.w/2,boss.h/2); g.addColorStop(0,'rgba(255,255,255,.92)'); g.addColorStop(.35,boss.color); g.addColorStop(1,'rgba(50,30,80,.65)'); ctx.fillStyle=g; ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=3; const st = Math.max(1, Math.min(7, (boss && boss.shapeForm) ? boss.shapeForm : (boss.stage || stage)));
+
+  // === BOSS_SHAPE_REFRESH_V1: ボス形状を刷新（ステージ毎に別シルエット + 脈動） ===
+  const pulse = 1 + Math.sin((boss.t||0) * 0.055) * 0.028;
+  const bw = boss.w * pulse;
+  const bh = boss.h * pulse;
+  const poly = (pts) => {
+    ctx.beginPath();
+    ctx.moveTo(pts[0][0], pts[0][1]);
+    for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
+    ctx.closePath();
+  };
+  if(st===1){
+    poly([[ bw*0.52, 0],[ bw*0.10,-bh*0.48],[-bw*0.26,-bh*0.18],[-bw*0.48,0],[-bw*0.26,bh*0.18],[ bw*0.10,bh*0.48]]);
+    ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.28; ctx.fillStyle = 'rgba(255,255,255,.75)';
+    ctx.fillRect(-bw*0.08,-5,bw*0.16,10);
+    ctx.globalAlpha = 1;
+  } else if(st===2){
+    ctx.beginPath();
+    ctx.ellipse(0,0,bw*0.48,bh*0.44,-0.18,0,Math.PI*2);
+    ctx.ellipse(bw*0.10,0,bw*0.30,bh*0.28,-0.18,0,Math.PI*2,true);
+    ctx.fill('evenodd');
+    ctx.stroke();
+    ctx.globalAlpha = 0.22; ctx.fillStyle = 'rgba(255,255,255,.85)';
+    ctx.fillRect(-bw*0.42,-bh*0.06,bw*0.72,bh*0.12);
+    ctx.globalAlpha = 1;
+  } else if(st===3){
+    const pts=[];
+    for(let i=0;i<12;i++){
+      const a = -Math.PI/2 + i*(Math.PI/6);
+      const rr = (i%2===0)? bw*0.50 : bw*0.26;
+      pts.push([Math.cos(a)*rr, Math.sin(a)*(bh*0.46)]);
+    }
+    poly(pts); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.20; ctx.fillStyle='rgba(255,255,255,.9)';
+    ctx.beginPath(); ctx.arc(0,0,bh*0.12,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  } else if(st===4){
+    ctx.beginPath();
+    ctx.moveTo(bw*0.50,0);
+    ctx.bezierCurveTo(bw*0.22,-bh*0.58,-bw*0.04,-bh*0.54,-bw*0.22,-bh*0.18);
+    ctx.bezierCurveTo(-bw*0.40,-bh*0.44,-bw*0.54,-bh*0.22,-bw*0.48,0);
+    ctx.bezierCurveTo(-bw*0.54,bh*0.22,-bw*0.40,bh*0.44,-bw*0.22,bh*0.18);
+    ctx.bezierCurveTo(-bw*0.04,bh*0.54,bw*0.22,bh*0.58,bw*0.50,0);
+    ctx.closePath();
+    ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.18; ctx.strokeStyle='rgba(255,255,255,.22)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(-bw*0.30,0); ctx.lineTo(bw*0.26,0); ctx.stroke();
+    ctx.globalAlpha = 1; ctx.lineWidth=3;
+  } else if(st===5){
+    poly([[ bw*0.48,0],[ bw*0.20,-bh*0.52],[-bw*0.06,-bh*0.16],[-bw*0.20,-bh*0.52],[-bw*0.48,-bh*0.18],[-bw*0.38,0],[-bw*0.48,bh*0.18],[-bw*0.20,bh*0.52],[-bw*0.06,bh*0.16],[ bw*0.20,bh*0.52]]);
+    ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.24; ctx.fillStyle='rgba(255,255,255,.92)';
+    ctx.fillRect(-bw*0.15,-bh*0.22,bw*0.10,bh*0.44);
+    ctx.fillRect( bw*0.05,-bh*0.22,bw*0.10,bh*0.44);
+    ctx.globalAlpha = 1;
+  } else {
+    const pts=[];
+    for(let i=0;i<14;i++){
+      const a = -Math.PI/2 + i*(Math.PI/7);
+      const rr = (i%2===0)? bw*0.50 : bw*0.30;
+      const yy = Math.sin(a)*(bh*0.50);
+      pts.push([Math.cos(a)*rr, yy]);
+    }
+    poly(pts); ctx.fill(); ctx.stroke();
+    ctx.globalAlpha = 0.20; ctx.fillStyle='rgba(255,255,255,.92)';
+    ctx.beginPath(); ctx.arc(-bw*0.06,0,bh*0.10,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
 
  ctx.restore();
 
@@ -2368,43 +2455,65 @@ function drawBullet(b){
 function drawLaser(l){ ctx.save(); const a=l.life/l.maxLife; ctx.globalAlpha=.65*a; ctx.strokeStyle=l.color; ctx.lineWidth=l.w; ctx.shadowBlur = (IS_MOBILE ? 0 : 26); ctx.shadowColor=l.color; ctx.beginPath(); ctx.moveTo(l.x1,l.y1); ctx.lineTo(l.x2,l.y2); ctx.stroke(); ctx.restore(); }
 
 
-function drawEnemyLaser(l){
 
- ctx.save();
-
- const a = l.life / l.maxLife;
-
- const charging = (l.delay && l.delay>0);
-
- const col = charging ? (l.colorWarn||'#ffd84d') : (l.colorFire||l.color||'#ff6262');
-
- const w = charging ? Math.max(3, Math.floor((l.w||24)*0.22)) : (l.w||24);
-
- ctx.globalAlpha = charging ? (0.55*a) : (0.75*a);
-
- ctx.strokeStyle = col;
-
- ctx.lineWidth = w;
-
- ctx.shadowBlur = (IS_MOBILE ? 0 : (charging ? 18 : 34));
-
- ctx.shadowColor = col;
-
- if(charging && ctx.setLineDash){ ctx.setLineDash([10,10]); }
-
- ctx.beginPath();
-
- ctx.moveTo(l.x1,l.y1);
-
- ctx.lineTo(l.x2,l.y2);
-
- ctx.stroke();
-
- if(charging && ctx.setLineDash){ ctx.setLineDash([]); }
-
- ctx.restore();
-
+function _distPointSeg(px,py,x1,y1,x2,y2){
+ const vx=x2-x1, vy=y2-y1;
+ const wx=px-x1, wy=py-y1;
+ const c1=vx*wx+vy*wy;
+ if(c1<=0) return Math.hypot(px-x1,py-y1);
+ const c2=vx*vx+vy*vy;
+ if(c2<=c1) return Math.hypot(px-x2,py-y2);
+ const t=c1/c2;
+ const bx=x1+t*vx, by=y1+t*vy;
+ return Math.hypot(px-bx,py-by);
 }
+function drawEnemyLaser(l){
+ ctx.save();
+ const charging = (l.delay && l.delay>0);
+ const thin = !!l.telegraphThin;
+ const col = charging ? (l.colorWarn||'#ffd84d') : (l.colorFire||l.color||'#ff6262');
+ // width
+ let w;
+ if(charging){
+  w = thin ? (l.teleW!=null? l.teleW : 1.8) : Math.max(3, ((l.w||24)*0.22));
+ } else {
+  w = (l.w||24);
+  if(l.appearFrames!=null){
+   const fireAge = Math.max(0, (l.maxLife - l.life) - (l.delay0||0));
+   const prog = clamp((fireAge / Math.max(1, l.appearFrames)), 0, 1);
+   const ease = prog*prog*(3 - 2*prog);
+   const minF = (l.minWFactor!=null? l.minWFactor : 0.12);
+   w = w * (minF + (1-minF)*ease);
+  }
+ }
+ // alpha
+ let alpha;
+ if(charging){
+  alpha = (l.teleAlpha!=null? l.teleAlpha : (thin?0.32:0.55));
+ } else {
+  const base = (l.fireAlpha!=null? l.fireAlpha : 0.95);
+  const endFade = clamp(l.life / 12, 0, 1);
+  if(l.appearFrames!=null){
+   const fireAge = Math.max(0, (l.maxLife - l.life) - (l.delay0||0));
+   const prog = clamp((fireAge / Math.max(1, l.appearFrames)), 0, 1);
+   const ease = prog*prog*(3 - 2*prog);
+   alpha = base * (0.25 + 0.75*ease) * endFade;
+  } else alpha = base * endFade;
+ }
+ ctx.globalAlpha = alpha;
+ ctx.strokeStyle = col;
+ ctx.lineWidth = w;
+ ctx.shadowBlur = (IS_MOBILE ? 0 : (charging ? (thin?10:18) : 34));
+ ctx.shadowColor = col;
+ if(charging && ctx.setLineDash){ ctx.setLineDash([10,10]); }
+ ctx.beginPath();
+ ctx.moveTo(l.x1,l.y1);
+ ctx.lineTo(l.x2,l.y2);
+ ctx.stroke();
+ if(charging && ctx.setLineDash){ ctx.setLineDash([]); }
+ ctx.restore();
+}
+
 
 function drawPower(p){ const core = p.color || '#89ff9b'; const edge = p.stroke || '#e7ffb3'; ctx.save(); ctx.translate(p.x,p.y); ctx.rotate(time*.08); ctx.shadowBlur = (IS_MOBILE ? 0 : 18); ctx.shadowColor=core; ctx.strokeStyle=edge; ctx.lineWidth=3; ctx.beginPath(); for(let i=0;i<4;i++){ const a=i*Math.PI/2; const x=Math.cos(a)*8,y=Math.sin(a)*8; if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);} ctx.closePath(); ctx.stroke(); ctx.globalAlpha=.92; ctx.fillStyle=core; ctx.fillRect(-2,-2,4,4); ctx.restore(); } function drawTerrains(){ for(const t of terrains){ ctx.save(); ctx.fillStyle = t.color; ctx.strokeStyle = t.stroke; ctx.lineWidth = 2; ctx.shadowBlur = 16; ctx.shadowColor = t.stroke; roundRect(t.x,t.y,t.w,t.h,10,true,true); ctx.fillStyle = 'rgba(255,255,255,.10)'; roundRect(t.x+2,t.y+2,Math.max(0,t.w-4),Math.min(6, Math.max(0,t.h-4)),8,true,false); ctx.restore(); } }
 
@@ -2758,12 +2867,11 @@ if(input.shot){
 
 
  if(l.delay && l.delay>0 && l.track && player){
-
-  const p = getPlayerHitbox();
-
-  l.y1 = p.y + p.h/2;
-
- }
+ const p = getPlayerHitbox();
+ const base = p.y + p.h/2;
+ const off = (l.trackOffset!=null ? l.trackOffset : 0);
+ l.y1 = clamp(base + off, 16, H-16);
+}
 
  if(l.delay && l.delay>0){
 
@@ -2774,21 +2882,25 @@ if(input.shot){
  }
 
 
+  // x2/y2 更新（水平レーザー or 角度付きレーザー）
+ if(l.dx!=null && l.dy!=null){
+  const yy = (l.delay && l.delay>0) ? l.y1 : (l.lockY!=null ? l.lockY : l.y1);
+  l.y1 = yy;
+  const L = (l.len!=null ? l.len : 900);
+  l.x2 = l.x1 + l.dx*L;
+  l.y2 = l.y1 + l.dy*L;
+ } else {
   let x2 = -20;
-
   for(const t of terrains){
-
    if(l.y1 > t.y - (l.w||24) && l.y1 < t.y + t.h + (l.w||24) && l.x1 > t.x){
-
     const cand = t.x + t.w;
-
     if(cand > x2 && cand < l.x1) x2 = cand;
-
    }
-
   }
-
-  l.x2 = x2; const yy = (l.delay && l.delay>0) ? l.y1 : (l.lockY!=null ? l.lockY : l.y1); l.y1 = yy; l.y2 = yy;
+  l.x2 = x2;
+  const yy = (l.delay && l.delay>0) ? l.y1 : (l.lockY!=null ? l.lockY : l.y1);
+  l.y1 = yy; l.y2 = yy;
+ }
 
   if((!l.delay || l.delay<=0) && l.dmg>0){
 
@@ -2796,11 +2908,16 @@ if(input.shot){
 
    const py = p.y + p.h/2;
 
-   const withinY = Math.abs(py - l.y1) < ((l.w||24)*0.50 + 2);
-
+   // hitbox scale down (少し小さく)
+ const hitR = (((l.w||24)*0.50) + 2) * 0.85;
+ if(l.dx!=null && l.dy!=null){
+   const d = _distPointSeg(p.x + p.w/2, p.y + p.h/2, l.x1, l.y1, l.x2, l.y2);
+   if(d < hitR) hitByEnemyLaser = true;
+ } else {
+   const withinY = Math.abs(py - l.y1) < hitR;
    const withinX = (p.x < l.x1) && (p.x + p.w > l.x2);
-
    if(withinX && withinY){ hitByEnemyLaser = true; }
+ }
 
   }
 
@@ -2822,11 +2939,82 @@ if(input.shot){
 
  const ampX = Math.min(84, 22 + stage*10 + (boss.phase||1)*6);
 
- boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
-
- boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
+ if(boss.laserHold && boss.laserHold>0){
+  boss.laserHold--;
+  // 停止（その場で溜め→発射）
+} else {
+  boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
+  boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
+}
 
  boss.x = clamp(boss.x, W*0.55, W - boss.w - 18); if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
+ // === PRISM_TRIDENT_V5: 狙わない / 移動→停止→溜め→発射→移動（ループ） ===
+ // world->screen変換により: 画面で垂直=worldで左向き。左右はworldで左±30°傾き。
+ const stgBoss = (boss.stage||stage);
+ if((stgBoss===7 && boss.phase>=2) || (stgBoss===6 && boss.phase>=2)){
+  // 発射中（予兆+発射）は停止・次の発射カウントもしない
+  if(boss.laserHold && boss.laserHold>0){
+    // 移動停止は移動ロジック側で処理
+  } else {
+    const CD = 180; // 3秒(60fps)
+    const key = (stgBoss===7) ? 'tridentCD' : 'laserCD';
+    boss[key] = (boss[key]==null? CD : boss[key]) - 1;
+    if(boss[key] <= 0){
+      boss[key] = CD;
+      const L = 900;
+      const ang = Math.PI/6; // 30°
+      const dxC = -1, dyC = 0;
+      const dx = -Math.cos(ang);
+      const dy = Math.sin(ang);
+      const delay = 60;          // 溜め 1秒
+      const fireLife = 90;       // 発射 1.5秒
+      const totalLife = delay + fireLife;
+      const appearFrames = 60;   // 太レーザーがゆっくり太くなる
+      const warn = 'rgba(255,255,255,0.55)';
+
+      // 狙わない：固定レーンを順番に使う
+      const lanes7 = [H*0.20, H*0.36, H*0.50, H*0.64, H*0.80];
+      const lanes6 = [H*0.28, H*0.50, H*0.72];
+      const lanes = (stgBoss===7) ? lanes7 : lanes6;
+      boss.laserLane = (boss.laserLane==null? 0 : (boss.laserLane+1)%lanes.length);
+      const baseY = clamp(lanes[boss.laserLane], 16, H-16);
+
+      // 停止を開始（溜め+発射）
+      boss.laserHold = Math.max(boss.laserHold||0, totalLife);
+
+      if(stgBoss===6){
+        enemyLasers.push({x1: boss.x, y1: baseY, x2: boss.x + dxC*L, y2: baseY + dyC*L, dx:dxC, dy:dyC, len:L,
+          w: 26, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
+          telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+          appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
+          colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: baseY});
+      } else {
+        const sep = (boss.phase>=4? 54 : 46);
+        const offs = [0, -sep, sep];
+        for(let i=0;i<3;i++){
+          const yy = clamp(baseY + offs[i], 16, H-16);
+          if(i===0){
+            enemyLasers.push({x1: boss.x, y1: yy, x2: boss.x + dxC*L, y2: yy + dyC*L, dx:dxC, dy:dyC, len:L,
+              w: 28, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
+              telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+              appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
+              colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: yy});
+          } else {
+            const sgn = (i===1? -1 : 1);
+            enemyLasers.push({x1: boss.x, y1: yy, x2: boss.x + dx*L, y2: yy + (sgn*dy)*L, dx:dx, dy:(sgn*dy), len:L,
+              w: 22, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
+              telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+              appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
+              colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: yy});
+          }
+        }
+      }
+      beep('sawtooth', 90, 48, 0.35, 0.09);
+      beep('triangle', 220, 110, 0.25, 0.05);
+    }
+  }
+ }
+
 
 
 const hpRatioShape = boss.hp / (boss.maxHP || 1);
@@ -2858,6 +3046,8 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
 
   const partsAlive = bossPartsAlive(boss);
 
+
+
   if(partsAlive > 0){
 
     for(const part of (boss.parts||[])){
@@ -2870,7 +3060,7 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
 
       if(part.shot > 0) continue;
 
-      const ox = part.x; const oy = part.y + part.h/2;
+      const ox = part.x + part.w*0.5; const oy = part.y + part.h*0.5;
 
       const batch = [];
 
@@ -2899,24 +3089,59 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
         part.shot = Math.max(12, Math.floor((34 - phase*4) / 1.5));
 
       } else {
-
-        const n = Math.max(7, Math.floor(9*load));
-
-        const base = Math.PI + Math.sin(boss.t*0.04)*0.38;
-
-        for(let i=0;i<n;i++){
-
-          const ang = base + (i/(n-1)-0.5)*0.95;
-
-          const sp = 4.2 + phase*0.22;
-
-          batch.push({x:ox + part.w*0.5,y:part.y+part.h,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:9,h:9,enemy:true,boss:true,round:true,color:'#ffd84d'});
-
-        }
-
-        part.shot = Math.max(15, Math.floor((40 - phase*3) / 1.5));
-
+  const isExtra = (part.id && String(part.id).startsWith('EX'));
+  if(isExtra){
+    // === EXTRA_PART_PATTERN: 増えた部位だけ弾幕を差別化 ===
+    const idx = parseInt(String(part.id).slice(2)) || 0;
+    const mode = (idx + phase) % 3;
+    const batch = [];
+    if(mode===0){
+      const n = Math.max(10, Math.floor(14*load));
+      const baseA = Math.PI + (boss.t*0.08) + idx*0.6;
+      for(let i=0;i<n;i++){
+        const ang = baseA + (i/(n-1)-0.5)*1.25;
+        const sp = 4.1 + (i%3)*0.28 + phase*0.12;
+        batch.push({x:ox,y:oy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:9,h:9,enemy:true,boss:true,round:true,color:'#ff8af2'});
       }
+      pushEnemyBullets(batch);
+      part.shot = Math.max(14, Math.floor((42 - phase*3) / 1.5));
+    } else if(mode===1){
+      const dir = aimVelocity(ox, oy, px, py, 5.3 + phase*0.20);
+      const a0 = Math.atan2(dir.vy, dir.vx);
+      const n = Math.max(5, Math.floor(7*load));
+      const half = Math.floor(n/2);
+      const spread = (phase>=4?0.07:0.09);
+      for(let k=-half;k<=half;k++){
+        const ang = a0 + k*spread;
+        const sp = 5.0 + phase*0.25;
+        batch.push({x:ox,y:oy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:12,h:5,enemy:true,boss:true,color:'#72f7ff'});
+      }
+      pushEnemyBullets(batch);
+      part.shot = Math.max(12, Math.floor((36 - phase*2) / 1.4));
+    } else {
+      const n = Math.max(12, Math.floor(16*load));
+      const hole = (idx % 4) + 2;
+      for(let i=0;i<n;i++){
+        if(i===hole || i===hole+1) continue;
+        const ang = Math.PI + (i/n)*Math.PI*2 + Math.sin((boss.t+idx)*0.06)*0.22;
+        const sp = 3.7 + (i%2)*0.35 + phase*0.10;
+        batch.push({x:ox,y:oy,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:10,h:6,enemy:true,boss:true,color:'#ffd84d'});
+      }
+      pushEnemyBullets(batch);
+      part.shot = Math.max(16, Math.floor((46 - phase*3) / 1.6));
+    }
+  } else {
+    const n = Math.max(7, Math.floor(9*load));
+    const base = Math.PI + Math.sin(boss.t*0.04)*0.38;
+    for(let i=0;i<n;i++){
+      const ang = base + (i/(n-1)-0.5)*0.95;
+      const sp = 4.2 + phase*0.22;
+      batch.push({x:ox + part.w*0.5,y:part.y+part.h,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,w:9,h:9,enemy:true,boss:true,round:true,color:'#ffd84d'});
+    }
+    pushEnemyBullets(batch);
+    part.shot = Math.max(15, Math.floor((40 - phase*3) / 1.5));
+  }
+}
 
       pushEnemyBullets(batch);
 
@@ -2937,8 +3162,7 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
  const FINAL_LASER_INTERVAL = 120; 
 
  const doLaser = stg7 && phase >= 3 && (boss.coreShot >= FINAL_LASER_INTERVAL);
-
- if(doLaser){
+ if(doLaser && !didTrident){
 
  const p = getPlayerHitbox();
 
@@ -3187,7 +3411,7 @@ function render(){
   ctx.restore();
 }
 
-function loop(now){ try{ _updatePerf(now || performance.now()); time++; if(state==='title') updateTitle(); else if(state==='ending') updateEnding(); else if(state==='error') updateError(); else { if(!paused) updatePlay(); } hiScore = Math.max(hiScore, score); render(); } catch(err){ console.error(err); errorMessage = String(err && err.message ? err.message : err); state = 'error'; render(); } requestAnimationFrame(loop); }
+function loop(now){ try{ _updatePerf(now || performance.now()); time++; if(state==='title') updateTitle(); else if(state==='ending') updateEnding(); else if(state==='error') updateError(); else { if(!paused) updatePlay(); } hiScore = Math.max(hiScore, score); render(); } catch(err){ console.error(err); errorMessage = String(err && err.message ? err.message : err); state = 'error'; input.shot = 0; input.alt = 0; render(); } requestAnimationFrame(loop); }
 
 addEventListener('keydown', e=>{ if(e.key==='ArrowUp') input.up=1; if(e.key==='ArrowDown') input.down=1; if(e.key==='ArrowLeft') input.left=1; if(e.key==='ArrowRight') input.right=1; if(e.key==='Shift') input.focus=1; if(e.key==='z' || e.key==='Z') input.shot=1; if(e.key==='x' || e.key==='X') input.alt=1; if(e.key==='c' || e.key==='C') input.bomb=1;
 
