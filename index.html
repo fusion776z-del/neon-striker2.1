@@ -1692,7 +1692,7 @@ function bossCorePickAlt(step, phase){
 const input = {up:0,down:0,left:0,right:0,shot:0,alt:0,bomb:0,focus:0,ax:0,ay:0};
 
 
-let shotType = 0; 
+let shotType = 2; 
 
 const SHOT_COLORS = {normal:'#72f7ff', wide:'#ff6262'};
 
@@ -2041,7 +2041,7 @@ function beginStage(){ paused=false; bullets=[]; enemyBullets=[]; enemies=[]; po
 
   if(stage>=4 && stageWaveQueue && stageWaveQueue.length){ stageWaveQueue = stageWaveQueue.filter((_,i)=> (i%2===0)); } resetPlayer(); startBGM(stage,false); }
 
-function startGame(){ stage=1; score=0; lives=3; bombs=2; capsuleCount=0; lifeUpTimer=0; wideLv=1; optionLv=0; laserLv=1; homingLv=1; shotType=0; syncTypeUI(); power=calcPower(); message=''; beginStage(); paused=false; state='play'; }
+function startGame(){ stage=1; score=0; lives=3; bombs=2; capsuleCount=0; lifeUpTimer=0; wideLv=1; optionLv=0; laserLv=1; homingLv=1; shotType=2; syncTypeUI(); power=calcPower(); message=''; beginStage(); paused=false; state='play'; }
 
 function nextStage(){ paused=false; stage++; if(stage>7){ state='ending'; input.shot=0; input.alt=0; stopBGM(); hiScore=Math.max(hiScore,score); return; } message=''; bombs=Math.min(5,bombs+1); beginStage(); }
 
@@ -2057,6 +2057,92 @@ function bossFormFor(stageNum, hpRatio){
 
   return (BOSS_ALT_FORM[stageNum] || stageNum);
 
+}
+
+
+// === PORTRAIT_PART_LAYOUT_V2: パーツ（砲台）を縦画面用に再配置して密度/当たり判定を整える ===
+function applyPortraitPartLayout(parts, stg, BW, BH){
+  if(!parts || !parts.length) return;
+  const isFinal = (stg===7);
+  const isLate  = (stg>=6);
+  const s = isFinal ? 0.88 : (isLate ? 0.92 : 1.00); // 最終は少し小さめにして密度を調整
+  const wC = BW * 0.22 * s; // cannon
+  const wS = BW * 0.20 * s; // side turret
+  const hS = BW * 0.14 * s;
+  const wT = BW * 0.28 * s; // top/bottom turret
+  const hT = BW * 0.16 * s;
+
+  const place = (id, cx, cy, w, h) => {
+    const p = parts.find(pp => pp && pp.id === id);
+    if(!p) return;
+    if(w!=null) p.w = w;
+    if(h!=null) p.h = h;
+    p.relX = cx - p.w/2;
+    p.relY = cy - p.h/2;
+  };
+
+  // 横幅が細い最終形に合わせて左右の振り幅を縮める
+  const LR = isFinal ? 0.15 : (isLate ? 0.20 : 0.26); // center +/- BW*LR
+  const cxL = BW * (0.50 - LR);
+  const cxR = BW * (0.50 + LR);
+
+  // 縦方向に並べて“縦画面映え”する密度に
+  if(isFinal){
+    place('T',  BW*0.50, BH*0.10, wT, hT);
+    place('UL', cxL,     BH*0.30, wS, hS);
+    place('UR', cxR,     BH*0.30, wS, hS);
+    place('L',  cxL,     BH*0.50, wC, wC);
+    place('R',  cxR,     BH*0.50, wC, wC);
+    place('XR1',BW*0.50 - BW*0.12, BH*0.70, wS, hS);
+    place('XR2',BW*0.50 + BW*0.12, BH*0.70, wS, hS);
+    place('B',  BW*0.50, BH*0.86, wT, hT);
+  } else if(isLate){
+    place('T',  BW*0.50, BH*0.12, wT, hT);
+    place('UL', cxL,     BH*0.26, wS, hS);
+    place('UR', cxR,     BH*0.26, wS, hS);
+    place('L',  cxL,     BH*0.52, wC, wC);
+    place('R',  cxR,     BH*0.52, wC, wC);
+    place('XR1',cxL,     BH*0.72, wS, hS);
+    place('XR2',cxR,     BH*0.88, wS, hS);
+    place('B',  BW*0.50, BH*0.82, wT, hT);
+  } else {
+    // STG1〜5: 既存より“中央寄り”にして当たり判定の散り過ぎを抑える
+    place('T',  BW*0.50, BH*0.12, wT, hT);
+    place('UL', BW*0.30, BH*0.24, wS, hS);
+    place('UR', BW*0.70, BH*0.24, wS, hS);
+    place('L',  BW*0.24, BH*0.52, wC, wC);
+    place('R',  BW*0.76, BH*0.52, wC, wC);
+    place('XR1',BW*0.30, BH*0.70, wS, hS);
+    place('XR2',BW*0.70, BH*0.86, wS, hS);
+    place('B',  BW*0.50, BH*0.82, wT, hT);
+  }
+
+  // 追加部位(EXn)も縦方向に均等配置（密度を整える）
+  const ex = parts.filter(p => p && p.id && String(p.id).startsWith('EX'))
+                  .sort((a,b)=> (parseInt(String(a.id).slice(2))||0) - (parseInt(String(b.id).slice(2))||0));
+  if(ex.length){
+    const y0 = isFinal ? 0.34 : 0.32;
+    const y1 = isFinal ? 0.78 : 0.76;
+    for(let i=0;i<ex.length;i++){
+      const p = ex[i];
+      const t = (ex.length===1)?0.5:(i/(ex.length-1));
+      const cy = BH * (y0 + (y1-y0)*t);
+      const side = (i%2===0) ? -1 : 1;
+      const dx = BW * (isFinal ? 0.12 : 0.18) * side;
+      // EXは小さめ
+      p.w = BW * 0.18 * s;
+      p.h = BW * 0.12 * s;
+      p.relX = (BW*0.50 + dx) - p.w/2;
+      p.relY = cy - p.h/2;
+    }
+  }
+
+  // 念のため: パーツが本体外へはみ出し過ぎないようクランプ
+  for(const p of parts){
+    if(!p) continue;
+    p.relX = Math.max(6, Math.min(BW - p.w - 6, p.relX));
+    p.relY = Math.max(6, Math.min(BH - p.h - 6, p.relY));
+  }
 }
 
 function createBoss(){
@@ -2114,6 +2200,9 @@ for(let i=0;i<extraCount;i++){
   const id = 'EX' + (i+1);
   parts.push({id, kind:'turret', color:t.color, relX, relY, w, h, hp:wingHP, maxHP:wingHP, alive:true, shot: 20 + i*2});
 }
+// === PORTRAIT_PART_LAYOUT_V2 APPLY ===
+applyPortraitPartLayout(parts, stage, BASE_W, BASE_H);
+
 // === 各ボス巨大化: 本体と部位を同倍率で拡大 ===
 for(const p of parts){
   p.relX *= BOSS_S; p.relY *= BOSS_S;
@@ -2264,15 +2353,87 @@ function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx
 
   // === BOSS_SHAPE_REFRESH_V1: ボス形状を刷新（ステージ毎に別シルエット + 脈動） ===
   const pulse = (boss && boss.pulseLock!=null) ? boss.pulseLock : (1 + Math.sin((boss.t||0) * 0.055) * 0.028);
-  const bw = boss.w * pulse;
-  const bh = boss.h * pulse;
+  // === PORTRAIT_BOSS_ASPECT: 縦画面での見た目を最適化（横幅を絞って縦長に） ===
+  // ※ゲーム世界は90°回転して表示されるため、ここではボス本体の描画比率のみ補正する
+  const stgDraw = (boss && boss.stage) ? boss.stage : stage;
+  const bodySX = (stgDraw===7 ? 0.78 : 0.82); // 横を少し絞る
+  const bodySY = (stgDraw===7 ? 1.22 : 1.16); // 縦を少し伸ばす
+  const bw = boss.w * pulse * bodySX;
+  const bh = boss.h * pulse * bodySY;
   const poly = (pts) => {
     ctx.beginPath();
     ctx.moveTo(pts[0][0], pts[0][1]);
     for(let i=1;i<pts.length;i++) ctx.lineTo(pts[i][0], pts[i][1]);
     ctx.closePath();
   };
-  if(st===1){
+  if(stgDraw===7){
+    // === FINAL_BOSS_PORTRAIT_SHAPE_V2: 最終ボス専用・完全別シルエット（縦向けクリスタル） ===
+    // 外郭: 縦長のクリスタル/槍 + 中抜きコア（evenodd）
+    const t2 = (boss && boss.t) ? boss.t : 0;
+    const ww = bw * (0.52 + Math.sin(t2*0.07)*0.02);
+    const hh = bh * (0.66 + Math.cos(t2*0.06)*0.02);
+    const nose = ww*0.20;
+    const fin = ww*1.05;
+    const shoulder = ww*0.62;
+    const waist = ww*0.40;
+    const tip = hh*1.00;
+
+    ctx.beginPath();
+    // outer polygon (clockwise)
+    ctx.moveTo( nose, -tip);
+    ctx.lineTo( shoulder, -hh*0.62);
+    ctx.lineTo( waist, -hh*0.30);
+    ctx.lineTo( fin, 0);
+    ctx.lineTo( waist,  hh*0.30);
+    ctx.lineTo( shoulder,  hh*0.62);
+    ctx.lineTo( nose,  tip);
+    ctx.lineTo( -nose,  tip);
+    ctx.lineTo( -shoulder,  hh*0.62);
+    ctx.lineTo( -waist,  hh*0.30);
+    ctx.lineTo( -fin, 0);
+    ctx.lineTo( -waist, -hh*0.30);
+    ctx.lineTo( -shoulder, -hh*0.62);
+    ctx.closePath();
+
+    // inner cutout diamond
+    ctx.moveTo( 0, -hh*0.55);
+    ctx.lineTo( ww*0.30, 0);
+    ctx.lineTo( 0,  hh*0.55);
+    ctx.lineTo( -ww*0.30, 0);
+    ctx.closePath();
+
+    ctx.fill('evenodd');
+    ctx.stroke();
+
+    // inner stacked cores
+    ctx.save();
+    ctx.globalAlpha = 0.22;
+    ctx.fillStyle = 'rgba(255,255,255,.92)';
+    const coreY = [-hh*0.28, 0, hh*0.28];
+    for(let i=0;i<coreY.length;i++){
+      const y = coreY[i];
+      const s = (i===1? 1.0 : 0.78);
+      ctx.beginPath();
+      ctx.moveTo(0, y - hh*0.10*s);
+      ctx.lineTo( ww*0.10*s, y);
+      ctx.lineTo(0, y + hh*0.10*s);
+      ctx.lineTo(-ww*0.10*s, y);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.globalAlpha = 0.16;
+    ctx.strokeStyle = 'rgba(255,255,255,.28)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(-ww*0.18, -hh*0.10);
+    ctx.lineTo( ww*0.18, -hh*0.10);
+    ctx.moveTo(-ww*0.18,  hh*0.10);
+    ctx.lineTo( ww*0.18,  hh*0.10);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.globalAlpha = 1;
+  } else if(st===1){
     poly([[ bw*0.52, 0],[ bw*0.10,-bh*0.48],[-bw*0.26,-bh*0.18],[-bw*0.48,0],[-bw*0.26,bh*0.18],[ bw*0.10,bh*0.48]]);
     ctx.fill(); ctx.stroke();
     ctx.globalAlpha = 0.28; ctx.fillStyle = 'rgba(255,255,255,.75)';
@@ -2331,18 +2492,38 @@ function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx
     ctx.globalAlpha = 1;
   }
  // MUZZLE_PORTS_MARKER: 発射口マーカー（中心/上/下）
- const mx = (-bw/2) + bw*0.06;
- const my = [0, -bh*0.18, bh*0.18];
- ctx.save();
- ctx.globalAlpha = 0.88;
- ctx.fillStyle = 'rgba(255,255,255,.9)';
- ctx.shadowBlur = (IS_MOBILE ? 0 : 12);
- ctx.shadowColor = 'rgba(255,255,255,.6)';
- for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(mx, my[i], 4.2, 0, Math.PI*2); ctx.fill(); }
- ctx.restore();
+ // 表示ルール:
+ // - STG1〜5: 完全非表示
+ // - STG6: 溜め中のみ表示
+ // - STG7: 溜め中＋発射中表示（発射中は少し濃い）
+ const stgBoss = (boss && boss.stage) ? boss.stage : stage;
+ const FIRE_LIFE = 90; // レーザー発射時間（enemyLasers生成時の fireLife と合わせる）
+ let muzzleAlpha = 0;
+ if(stgBoss === 6){
+   if(boss && boss.laserHold && boss.laserHold > 0){
+     const hold = boss.laserHold;
+     const charging = (hold > FIRE_LIFE);
+     if(charging) muzzleAlpha = 0.40;
+   }
+ } else if(stgBoss === 7){
+   if(boss && boss.laserHold && boss.laserHold > 0){
+     const hold = boss.laserHold;
+     const charging = (hold > FIRE_LIFE);
+     muzzleAlpha = charging ? 0.40 : 0.62; // 発射中を少し濃く
+   }
+ }
 
-
-
+ if(muzzleAlpha > 0){
+   const mx = (-bw/2) + bw*0.06;
+   const my = [0, -bh*0.18, bh*0.18];
+   ctx.save();
+   ctx.globalAlpha = muzzleAlpha;
+   ctx.fillStyle = 'rgba(255,255,255,.9)';
+   ctx.shadowBlur = (IS_MOBILE ? 0 : 12);
+   ctx.shadowColor = 'rgba(255,255,255,.6)';
+   for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(mx, my[i], 4.2, 0, Math.PI*2); ctx.fill(); }
+   ctx.restore();
+ }
  ctx.restore();
 
 
