@@ -2472,7 +2472,6 @@ function drawEnemyLaser(l){
  const charging = (l.delay && l.delay>0);
  const thin = !!l.telegraphThin;
  const col = charging ? (l.colorWarn||'#ffd84d') : (l.colorFire||l.color||'#ff6262');
- // width
  let w;
  if(charging){
   w = thin ? (l.teleW!=null? l.teleW : 1.8) : Math.max(3, ((l.w||24)*0.22));
@@ -2486,7 +2485,6 @@ function drawEnemyLaser(l){
    w = w * (minF + (1-minF)*ease);
   }
  }
- // alpha
  let alpha;
  if(charging){
   alpha = (l.teleAlpha!=null? l.teleAlpha : (thin?0.32:0.55));
@@ -2939,79 +2937,75 @@ if(input.shot){
 
  const ampX = Math.min(84, 22 + stage*10 + (boss.phase||1)*6);
 
- if(boss.laserHold && boss.laserHold>0){
-  boss.laserHold--;
-  // 停止（その場で溜め→発射）
-} else {
-  boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
-  boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
-}
+ boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
+
+ boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
 
  boss.x = clamp(boss.x, W*0.55, W - boss.w - 18); if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
- // === PRISM_TRIDENT_V5: 狙わない / 移動→停止→溜め→発射→移動（ループ） ===
- // world->screen変換により: 画面で垂直=worldで左向き。左右はworldで左±30°傾き。
+ // === PRISM_TRIDENT_V5_1: 停止位置と発射原点を一致（muzzleX固定）/ 狙わない / 移動→停止→溜め→発射→移動 ===
  const stgBoss = (boss.stage||stage);
  if((stgBoss===7 && boss.phase>=2) || (stgBoss===6 && boss.phase>=2)){
-  // 発射中（予兆+発射）は停止・次の発射カウントもしない
-  if(boss.laserHold && boss.laserHold>0){
-    // 移動停止は移動ロジック側で処理
-  } else {
-    const CD = 180; // 3秒(60fps)
-    const key = (stgBoss===7) ? 'tridentCD' : 'laserCD';
-    boss[key] = (boss[key]==null? CD : boss[key]) - 1;
-    if(boss[key] <= 0){
-      boss[key] = CD;
-      const L = 900;
-      const ang = Math.PI/6; // 30°
-      const dxC = -1, dyC = 0;
-      const dx = -Math.cos(ang);
-      const dy = Math.sin(ang);
-      const delay = 60;          // 溜め 1秒
-      const fireLife = 90;       // 発射 1.5秒
-      const totalLife = delay + fireLife;
-      const appearFrames = 60;   // 太レーザーがゆっくり太くなる
-      const warn = 'rgba(255,255,255,0.55)';
+  if(!boss.laserHold || boss.laserHold<=0){
+   const CD = 180; // 3秒(60fps)
+   const key = (stgBoss===7) ? 'tridentCD' : 'laserCD';
+   boss[key] = (boss[key]==null? CD : boss[key]) - 1;
+   if(boss[key] <= 0){
+    boss[key] = CD;
+    const L = 900;
+    const ang = Math.PI/6; // 30°
+    const dxC = -1, dyC = 0;
+    const dx = -Math.cos(ang);
+    const dy = Math.sin(ang);
+    const delay = 60;          // 溜め 1秒
+    const fireLife = 90;       // 発射 1.5秒
+    const totalLife = delay + fireLife;
+    const appearFrames = 60;
+    const warn = 'rgba(255,255,255,0.55)';
 
-      // 狙わない：固定レーンを順番に使う
-      const lanes7 = [H*0.20, H*0.36, H*0.50, H*0.64, H*0.80];
-      const lanes6 = [H*0.28, H*0.50, H*0.72];
-      const lanes = (stgBoss===7) ? lanes7 : lanes6;
-      boss.laserLane = (boss.laserLane==null? 0 : (boss.laserLane+1)%lanes.length);
-      const baseY = clamp(lanes[boss.laserLane], 16, H-16);
+    // 発射原点（ボスの前縁寄り）を固定
+    boss.muzzleX = boss.x + boss.w*0.04;
+    const x0 = boss.muzzleX;
 
-      // 停止を開始（溜め+発射）
-      boss.laserHold = Math.max(boss.laserHold||0, totalLife);
+    // 狙わない：固定レーンを順番
+    const lanes7 = [H*0.20, H*0.36, H*0.50, H*0.64, H*0.80];
+    const lanes6 = [H*0.28, H*0.50, H*0.72];
+    const lanes = (stgBoss===7) ? lanes7 : lanes6;
+    boss.laserLane = (boss.laserLane==null? 0 : (boss.laserLane+1)%lanes.length);
+    const baseY = clamp(lanes[boss.laserLane], 16, H-16);
 
-      if(stgBoss===6){
-        enemyLasers.push({x1: boss.x, y1: baseY, x2: boss.x + dxC*L, y2: baseY + dyC*L, dx:dxC, dy:dyC, len:L,
-          w: 26, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
-          telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-          appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
-          colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: baseY});
-      } else {
-        const sep = (boss.phase>=4? 54 : 46);
-        const offs = [0, -sep, sep];
-        for(let i=0;i<3;i++){
-          const yy = clamp(baseY + offs[i], 16, H-16);
-          if(i===0){
-            enemyLasers.push({x1: boss.x, y1: yy, x2: boss.x + dxC*L, y2: yy + dyC*L, dx:dxC, dy:dyC, len:L,
-              w: 28, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
-              telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-              appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
-              colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: yy});
-          } else {
-            const sgn = (i===1? -1 : 1);
-            enemyLasers.push({x1: boss.x, y1: yy, x2: boss.x + dx*L, y2: yy + (sgn*dy)*L, dx:dx, dy:(sgn*dy), len:L,
-              w: 22, life: totalLife, maxLife: totalLife, delay: delay, delay0: delay, dmg: 1,
-              telegraphThin:true, teleW:1.6, teleAlpha:0.32,
-              appearFrames: appearFrames, minWFactor:0.12, fireAlpha:0.95,
-              colorWarn: warn, colorFire:'#ff6262', boss:true, track:false, lockY: yy});
-          }
+    // 停止（溜め+発射）
+    boss.laserHold = totalLife;
+
+    if(stgBoss===6){
+      enemyLasers.push({x1:x0, y1:baseY, x2:x0 + dxC*L, y2:baseY + dyC*L, dx:dxC, dy:dyC, len:L,
+        w:26, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+        telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:baseY});
+    } else {
+      const sep = (boss.phase>=4? 54 : 46);
+      const offs = [0, -sep, sep];
+      for(let i=0;i<3;i++){
+        const yy = clamp(baseY + offs[i], 16, H-16);
+        if(i===0){
+          enemyLasers.push({x1:x0, y1:yy, x2:x0 + dxC*L, y2:yy + dyC*L, dx:dxC, dy:dyC, len:L,
+            w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+            telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+            colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
+        } else {
+          const sgn = (i===1? -1 : 1);
+          enemyLasers.push({x1:x0, y1:yy, x2:x0 + dx*L, y2:yy + (sgn*dy)*L, dx:dx, dy:(sgn*dy), len:L,
+            w:22, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+            telegraphThin:true, teleW:1.6, teleAlpha:0.32,
+            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.95,
+            colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
         }
       }
-      beep('sawtooth', 90, 48, 0.35, 0.09);
-      beep('triangle', 220, 110, 0.25, 0.05);
     }
+    beep('sawtooth', 90, 48, 0.35, 0.09);
+    beep('triangle', 220, 110, 0.25, 0.05);
+   }
   }
  }
 
@@ -3045,7 +3039,30 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
   const px = player.x + player.w/2, py = player.y + player.h/2;
 
   const partsAlive = bossPartsAlive(boss);
-
+ const stg7L = ((boss.stage||stage)===7);
+ const TRIDENT_INTERVAL = 120;
+ // 部位が残っていてもカウントを進め、一定間隔で3本レーザーを発動
+ boss.coreShot = (boss.coreShot||0) + 1;
+ let didTrident = false;
+ const doTrident = false; // replaced by non-aim laser cycle
+ if(doTrident){
+  // === PRISM_TRIDENT: 3本同時・追尾→ロックレーザー（STAGE7専用 / phase>=2） ===
+  const hb = getPlayerHitbox();
+  const y0 = hb.y + hb.h/2;
+  const dy = (phase>=4 ? 54 : 46);
+  const offs = [0, -dy, dy];
+  for(let i=0;i<offs.length;i++){
+    const off = offs[i];
+    const yy = clamp(y0 + off, 16, H-16);
+    const w = (i===0 ? 28 : 20);
+    enemyLasers.push({x1: boss.x, y1: yy, x2: -20, y2: yy, w: w, life: 90, maxLife: 90, delay: 60, dmg: 1,
+      colorWarn: '#ffd84d', colorFire: '#ff6262', boss:true, track:true, trackOffset: off, lockY:null});
+  }
+  beep('sawtooth', 90, 48, 0.35, 0.09);
+  beep('triangle', 220, 110, 0.25, 0.05);
+  boss.coreShot = 0;
+  didTrident = true;
+ }
 
 
   if(partsAlive > 0){
@@ -3147,7 +3164,7 @@ if(boss.shapePhase === 0 && hpRatioShape < 0.50){
 
     }
 
-    boss.shot = Math.max(6, Math.floor((16 - phase) / 1.5));
+    boss.shot = didTrident ? 76 : Math.max(6, Math.floor((16 - phase) / 1.5));
 
   } else {
 
