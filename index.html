@@ -2263,7 +2263,7 @@ function drawEnemy(e){ const color = e.type==='gun' ? '#ffb347' : e.type==='zig'
 function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx.translate(boss.x+boss.w/2,boss.y+boss.h/2); ctx.shadowBlur = (IS_MOBILE ? 0 : 28); ctx.shadowColor=boss.color; const g=ctx.createLinearGradient(-boss.w/2,-boss.h/2,boss.w/2,boss.h/2); g.addColorStop(0,'rgba(255,255,255,.92)'); g.addColorStop(.35,boss.color); g.addColorStop(1,'rgba(50,30,80,.65)'); ctx.fillStyle=g; ctx.strokeStyle='rgba(255,255,255,.45)'; ctx.lineWidth=3; const st = Math.max(1, Math.min(7, (boss && boss.shapeForm) ? boss.shapeForm : (boss.stage || stage)));
 
   // === BOSS_SHAPE_REFRESH_V1: ボス形状を刷新（ステージ毎に別シルエット + 脈動） ===
-  const pulse = 1 + Math.sin((boss.t||0) * 0.055) * 0.028;
+  const pulse = (boss && boss.pulseLock!=null) ? boss.pulseLock : (1 + Math.sin((boss.t||0) * 0.055) * 0.028);
   const bw = boss.w * pulse;
   const bh = boss.h * pulse;
   const poly = (pts) => {
@@ -2330,6 +2330,17 @@ function drawBoss(){ if(!boss) return; bossUpdatePartsPos(boss); ctx.save(); ctx
     ctx.beginPath(); ctx.arc(-bw*0.06,0,bh*0.10,0,Math.PI*2); ctx.fill();
     ctx.globalAlpha = 1;
   }
+ // MUZZLE_PORTS_MARKER: 発射口マーカー（中心/上/下）
+ const mx = (-bw/2) + bw*0.06;
+ const my = [0, -bh*0.18, bh*0.18];
+ ctx.save();
+ ctx.globalAlpha = 0.88;
+ ctx.fillStyle = 'rgba(255,255,255,.9)';
+ ctx.shadowBlur = (IS_MOBILE ? 0 : 12);
+ ctx.shadowColor = 'rgba(255,255,255,.6)';
+ for(let i=0;i<3;i++){ ctx.beginPath(); ctx.arc(mx, my[i], 4.2, 0, Math.PI*2); ctx.fill(); }
+ ctx.restore();
+
 
 
  ctx.restore();
@@ -2939,6 +2950,7 @@ if(input.shot){
 
  if(boss.laserHold && boss.laserHold>0){
   boss.laserHold--;
+  if(boss.laserHold<=0){ boss.pulseLock = null; }
   // 停止（その場で溜め→発射）
 } else {
   boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
@@ -2976,9 +2988,21 @@ if(input.shot){
     boss.stopX = stopX; boss.stopY = stopY;
     boss.x = stopX; boss.y = stopY;
 
-    // 発射原点（ボス前縁寄り）を停止位置で固定
-    boss.muzzleX = boss.stopX + boss.w*0.04;
-    const x0 = boss.muzzleX;
+    // 発射原点（発射口そのもの）を停止位置で固定
+    // 発射中に脈動(pulse)で発射口がズレないよう pulse を固定
+    boss.pulseLock = (boss.pulseLock!=null)? boss.pulseLock : (1 + Math.sin((boss.t||0) * 0.055) * 0.028);
+    const _pulse = boss.pulseLock;
+    const _bw = boss.w * _pulse;
+    const _bh = boss.h * _pulse;
+    const cx = boss.x + boss.w*0.5;
+    const cy = boss.y + boss.h*0.5;
+    // 発射口（中心/上/下）
+    const xPort = cx - _bw/2 + _bw*0.06;
+    const yPort0 = cy;
+    const yPortU = cy - _bh*0.18;
+    const yPortD = cy + _bh*0.18;
+    boss.muzzleX = xPort;
+    const x0 = xPort;
 
     // 狙わない：固定レーン巡回
     const lanes7 = [H*0.20, H*0.36, H*0.50, H*0.64, H*0.80];
@@ -2992,32 +3016,31 @@ if(input.shot){
 
     if(stgBoss2===6){
       // STG6: 1本だけ
-      enemyLasers.push({x1:x0, y1:baseY, x2:x0 + dxC*L, y2:baseY + dyC*L, dx:dxC, dy:dyC, len:L,
+      enemyLasers.push({x1:x0, y1:yPort0, x2:x0 + dxC*L, y2:yPort0 + dyC*L, dx:dxC, dy:dyC, len:L,
         w:26, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
         telegraphThin:true, teleW:2.0, teleAlpha:0.38,
         appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
-        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:baseY});
+        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yPort0});
     } else {
-      // STG7: 常に3本（中心+左右±30°）。左右も同じ太さで見えやすく。
-      const sep = (boss.phase>=4? 54 : 46);
-      const offs = [0, -sep, sep];
-      for(let i=0;i<3;i++){
-        const yy = clamp(baseY + offs[i], 16, H-16);
-        if(i===0){
-          enemyLasers.push({x1:x0, y1:yy, x2:x0 + dxC*L, y2:yy + dyC*L, dx:dxC, dy:dyC, len:L,
-            w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
-            telegraphThin:true, teleW:2.0, teleAlpha:0.38,
-            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
-            colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
-        } else {
-          const sgn = (i===1? -1 : 1);
-          enemyLasers.push({x1:x0, y1:yy, x2:x0 + dx*L, y2:yy + (sgn*dy)*L, dx:dx, dy:(sgn*dy), len:L,
-            w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
-            telegraphThin:true, teleW:2.0, teleAlpha:0.38,
-            appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
-            colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yy});
-        }
-      }
+      // STG7: 常に3本（中心/上/下の発射口ポートから発射）
+      // center
+      enemyLasers.push({x1:x0, y1:yPort0, x2:x0 + dxC*L, y2:yPort0 + dyC*L, dx:dxC, dy:dyC, len:L,
+        w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+        telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
+        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yPort0});
+      // up
+      enemyLasers.push({x1:x0, y1:yPortU, x2:x0 + dx*L, y2:yPortU + (-dy)*L, dx:dx, dy:(-dy), len:L,
+        w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+        telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
+        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yPortU});
+      // down
+      enemyLasers.push({x1:x0, y1:yPortD, x2:x0 + dx*L, y2:yPortD + (dy)*L, dx:dx, dy:(dy), len:L,
+        w:28, life:totalLife, maxLife:totalLife, delay:delay, delay0:delay, dmg:1,
+        telegraphThin:true, teleW:2.0, teleAlpha:0.38,
+        appearFrames:appearFrames, minWFactor:0.12, fireAlpha:0.98,
+        colorWarn:warn, colorFire:'#ff6262', boss:true, track:false, lockY:yPortD});
     }
 
     beep('sawtooth', 90, 48, 0.35, 0.09);
