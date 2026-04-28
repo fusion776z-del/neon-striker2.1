@@ -1499,6 +1499,7 @@ let bossIntroTimer=0, clearTimer=0, shake=0, errorMessage='', lifeUpTimer=0;
 let player, bullets, enemyBullets, enemies, powerups, options, boss, enemiesRemaining, spawnTimer, trail, bossReady, lasers, enemyLasers, bombFlash, stageWaveQueue, stageWaveCursor;
 
 let capsuleCount = 0;
+let dmgLv = 0; // カプセル取得で上がるワイドショット攻撃力Lv
 
 
 const CAPSULES = [
@@ -2023,7 +2024,7 @@ const center = ()=>{ if(!joy) return; const r=joy.getBoundingClientRect(); cx=r.
 })();
 
 
-function getWayCount(){ const p = wideLv; return p >= 8 ? 5 : p >= 5 ? 4 : p >= 3 ? 3 : 2; }
+function getWayCount(){ return 3; }
 
 function getOptionCount(){ const p = optionLv; return p >= 4 ? 4 : p; }
 
@@ -2041,7 +2042,7 @@ function beginStage(){ paused=false; bullets=[]; enemyBullets=[]; enemies=[]; po
 
   if(stage>=4 && stageWaveQueue && stageWaveQueue.length){ stageWaveQueue = stageWaveQueue.filter((_,i)=> (i%2===0)); } resetPlayer(); startBGM(stage,false); }
 
-function startGame(){ stage=1; score=0; lives=3; bombs=2; capsuleCount=0; lifeUpTimer=0; wideLv=1; optionLv=0; laserLv=1; homingLv=1; shotType=2; syncTypeUI(); power=calcPower(); message=''; beginStage(); paused=false; state='play'; }
+function startGame(){ stage=1; score=0; lives=3; bombs=2; capsuleCount=0; dmgLv=0; lifeUpTimer=0; wideLv=1; optionLv=0; laserLv=1; homingLv=1; shotType=2; syncTypeUI(); power=calcPower(); message=''; beginStage(); paused=false; state='play'; }
 
 function nextStage(){ paused=false; stage++; if(stage>7){ state='ending'; input.shot=0; input.alt=0; stopBGM(); hiScore=Math.max(hiScore,score); return; } message=''; bombs=Math.min(5,bombs+1); beginStage(); }
 
@@ -2061,83 +2062,99 @@ function bossFormFor(stageNum, hpRatio){
 
 
 // === PORTRAIT_PART_LAYOUT_V2: パーツ（砲台）を縦画面用に再配置して密度/当たり判定を整える ===
+// === PORTRAIT_PART_LAYOUT_V4 (SCREEN-LR): 縦シューティング視点で『左右対称』になる部位配置 ===
+// 重要: このゲームは WORLD を 90°CCW 回転して縦画面へ表示しているため、
+//        画面の左右(X方向)は WORLD の Y方向に対応する。
+//        → 画面で左右対称にしたい場合、WORLD(=ボス局所)では relY を左右対称(ミラー)にする。
+// ルール:
+// - 画面の一番上(先端上)に部位を置かない（= WORLD x を上端に寄せ過ぎない）
+// - 部位が偶数個: すべて左右線対称(画面左右)に配置
+// - 部位が奇数個: 先端(画面の一番下)に中心1個 + 残りを左右線対称に配置
 function applyPortraitPartLayout(parts, stg, BW, BH){
   if(!parts || !parts.length) return;
+
+  const listAll = parts.filter(p => p);
+  const total = listAll.length;
+
   const isFinal = (stg===7);
   const isLate  = (stg>=6);
-  const s = isFinal ? 0.88 : (isLate ? 0.92 : 1.00); // 最終は少し小さめにして密度を調整
-  const wC = BW * 0.22 * s; // cannon
-  const wS = BW * 0.20 * s; // side turret
-  const hS = BW * 0.14 * s;
-  const wT = BW * 0.28 * s; // top/bottom turret
-  const hT = BW * 0.16 * s;
 
-  const place = (id, cx, cy, w, h) => {
-    const p = parts.find(pp => pp && pp.id === id);
+  // サイズは大きくし過ぎない（当たり判定が厳しすぎるのを避ける程度）
+  const s = isFinal ? 0.98 : (isLate ? 1.00 : 1.02);
+
+  const sizeFor = (p) => {
+    if(p && p.kind==='cannon'){
+      const w = BW * 0.22 * s;
+      return {w:w, h:w};
+    }
+    // 目立つタレットは少し大きめ
+    if(p && (p.id==='T' || p.id==='B')){
+      return {w: BW * 0.30 * s, h: BW * 0.18 * s};
+    }
+    return {w: BW * 0.20 * s, h: BW * 0.14 * s};
+  };
+
+  // 奇数なら「画面の一番下(先端)」に置くセンターを選ぶ（Bがあれば優先）
+  let centerBottom = null;
+  let rem = listAll.slice();
+  if((total % 2)===1){
+    centerBottom = rem.find(p => p.id==='B') || rem.find(p => p.id==='T') || rem.find(p => p.kind!=='cannon') || rem[rem.length-1];
+    rem = rem.filter(p => p !== centerBottom);
+  }
+
+  // 残りは必ず偶数
+  const pairCount = Math.floor(rem.length/2);
+
+  // ペアの並び順：なるべく既存の左右ペア(L/R, UL/UR, XR1/XR2)が同段に来るように
+  const rank = (p) => {
+    if(!p) return 999;
+    const id = String(p.id||'');
+    if(id==='UL' || id==='UR') return 10;
+    if(id==='L'  || id==='R')  return 20;
+    if(id==='XR1'|| id==='XR2')return 30;
+    if(id.startsWith('EX'))    return 40;
+    if(id==='T'  || id==='B')  return 50;
+    return 80;
+  };
+  rem.sort((a,b)=> (rank(a)-rank(b)) || String(a.id).localeCompare(String(b.id)));
+
+  // === 画面左右対称 = WORLD(Y) を中心BH/2でミラー ===
+  // 画面の左右広がり(=WORLDのYオフセット)
+  const LR = isFinal ? 0.18 : (isLate ? 0.20 : 0.22);
+  const cyL = BH * (0.50 - LR);
+  const cyR = BH * (0.50 + LR);
+
+  // 縦方向(画面上下)は WORLDのXで決まる。上端を避けるため X を大きめ開始。
+  // 画面上 = WORLD x が大きい / 画面下 = WORLD x が小さい（y' = W - x のため）
+  const xTop    = BW * (isFinal ? 0.82 : 0.80); // 画面上寄り（ただし先端上には置かない）
+  const xBottom = BW * (centerBottom ? (isFinal ? 0.34 : 0.38) : (isFinal ? 0.22 : 0.26));
+
+  const placeAbs = (p, cx, cy) => {
     if(!p) return;
-    if(w!=null) p.w = w;
-    if(h!=null) p.h = h;
+    const sz = sizeFor(p);
+    p.w = sz.w; p.h = sz.h;
     p.relX = cx - p.w/2;
     p.relY = cy - p.h/2;
   };
 
-  // 横幅が細い最終形に合わせて左右の振り幅を縮める
-  const LR = isFinal ? 0.15 : (isLate ? 0.20 : 0.26); // center +/- BW*LR
-  const cxL = BW * (0.50 - LR);
-  const cxR = BW * (0.50 + LR);
-
-  // 縦方向に並べて“縦画面映え”する密度に
-  if(isFinal){
-    place('T',  BW*0.50, BH*0.10, wT, hT);
-    place('UL', cxL,     BH*0.30, wS, hS);
-    place('UR', cxR,     BH*0.30, wS, hS);
-    place('L',  cxL,     BH*0.50, wC, wC);
-    place('R',  cxR,     BH*0.50, wC, wC);
-    place('XR1',BW*0.50 - BW*0.12, BH*0.70, wS, hS);
-    place('XR2',BW*0.50 + BW*0.12, BH*0.70, wS, hS);
-    place('B',  BW*0.50, BH*0.86, wT, hT);
-  } else if(isLate){
-    place('T',  BW*0.50, BH*0.12, wT, hT);
-    place('UL', cxL,     BH*0.26, wS, hS);
-    place('UR', cxR,     BH*0.26, wS, hS);
-    place('L',  cxL,     BH*0.52, wC, wC);
-    place('R',  cxR,     BH*0.52, wC, wC);
-    place('XR1',cxL,     BH*0.72, wS, hS);
-    place('XR2',cxR,     BH*0.88, wS, hS);
-    place('B',  BW*0.50, BH*0.82, wT, hT);
-  } else {
-    // STG1〜5: 既存より“中央寄り”にして当たり判定の散り過ぎを抑える
-    place('T',  BW*0.50, BH*0.12, wT, hT);
-    place('UL', BW*0.30, BH*0.24, wS, hS);
-    place('UR', BW*0.70, BH*0.24, wS, hS);
-    place('L',  BW*0.24, BH*0.52, wC, wC);
-    place('R',  BW*0.76, BH*0.52, wC, wC);
-    place('XR1',BW*0.30, BH*0.70, wS, hS);
-    place('XR2',BW*0.70, BH*0.86, wS, hS);
-    place('B',  BW*0.50, BH*0.82, wT, hT);
+  // ペアを画面左右にミラー配置しつつ、画面上下方向に等間隔で並べる
+  for(let i=0;i<pairCount;i++){
+    const a = rem[i*2];
+    const b = rem[i*2+1];
+    const t = (pairCount<=1) ? 0.5 : (i/(pairCount-1));
+    const cx = xTop + (xBottom - xTop) * t;
+    // ここが“画面左右”のミラー（WORLDのY）
+    placeAbs(a, cx, cyL);
+    placeAbs(b, cx, cyR);
   }
 
-  // 追加部位(EXn)も縦方向に均等配置（密度を整える）
-  const ex = parts.filter(p => p && p.id && String(p.id).startsWith('EX'))
-                  .sort((a,b)=> (parseInt(String(a.id).slice(2))||0) - (parseInt(String(b.id).slice(2))||0));
-  if(ex.length){
-    const y0 = isFinal ? 0.34 : 0.32;
-    const y1 = isFinal ? 0.78 : 0.76;
-    for(let i=0;i<ex.length;i++){
-      const p = ex[i];
-      const t = (ex.length===1)?0.5:(i/(ex.length-1));
-      const cy = BH * (y0 + (y1-y0)*t);
-      const side = (i%2===0) ? -1 : 1;
-      const dx = BW * (isFinal ? 0.12 : 0.18) * side;
-      // EXは小さめ
-      p.w = BW * 0.18 * s;
-      p.h = BW * 0.12 * s;
-      p.relX = (BW*0.50 + dx) - p.w/2;
-      p.relY = cy - p.h/2;
-    }
+  // 奇数のセンター部位：画面の一番下先端へ（WORLD x を小さめ）
+  if(centerBottom){
+    const cx = BW * (isFinal ? 0.14 : 0.16);
+    placeAbs(centerBottom, cx, BH*0.50);
   }
 
-  // 念のため: パーツが本体外へはみ出し過ぎないようクランプ
+  // はみ出し防止（本体内に収める）
   for(const p of parts){
     if(!p) continue;
     p.relX = Math.max(6, Math.min(BW - p.w - 6, p.relX));
@@ -2896,11 +2913,12 @@ if(input.shot){
       const spread = (input.focus ? 0.18 : 0.36);
       const speed  = (input.focus ? 10.0 : 8.6);
       const pColor = SHOT_COLORS.wide;
-      const sources = [{x:player.x+10,y:player.y+9,s:1.0}].concat(options.map(o=>({x:o.x+10,y:o.y,s:0.8})));
+ const dmgMul = Math.min(5.0, 1.0 + dmgLv*0.12); // カプセル毎に攻撃力UP
+ const sources = [{x:player.x+10,y:player.y+9,s:1.0}].concat(options.map(o=>({x:o.x+10,y:o.y,s:0.8})));
       for(const src of sources){
         for(let i=0;i<ways;i++){
           const a=(i-(ways-1)/2)*spread;
-          bullets.push({x:src.x,y:src.y,vx:speed,vy:a*speed,w:12,h:3,enemy:false,dmg:1.0*src.s,color:pColor,pierce:true});
+          bullets.push({x:src.x,y:src.y,vx:speed,vy:a*speed,w:12,h:3,enemy:false,dmg:(1.0*dmgMul)*src.s,color:pColor,pierce:true});
         }
       }
       // optional: keep homing
@@ -3131,15 +3149,41 @@ if(input.shot){
 
  if(boss.laserHold && boss.laserHold>0){
   boss.laserHold--;
-  if(boss.laserHold<=0){ boss.pulseLock = null; }
+  if(boss.laserHold<=0){
+    // === LASER_RETURN_MATCH_SPEED_V2: 普段の軌道速度(微分)と同じ速度で復帰（急戻り防止） ===
+    boss.pulseLock = null;
+    boss.returning = 1;
+    // 現在位置を中心として採用（位相の飛びを抑える）
+    boss.centerX = boss.x;
+  }
   // 停止（その場で溜め→発射）
 } else {
-  boss.y = centerY + Math.sin(boss.t*0.020) * ampY;
-  boss.x = centerX + Math.cos(boss.t*0.018 + (boss.stage||stage)*0.7) * ampX;
+  // 通常移動ターゲット（普段の軌道）
+  const thX = boss.t*0.018 + (boss.stage||stage)*0.7;
+  const thY = boss.t*0.020;
+  const tx = centerX + Math.cos(thX) * ampX;
+  const ty = centerY + Math.sin(thY) * ampY;
+
+  if(boss.returning){
+    // 軌道式の微分から、このフレームの“普段速度”を算出
+    const normalSp = Math.max(0.9, Math.min(6.0, Math.hypot(Math.sin(thX)*ampX*0.018, Math.cos(thY)*ampY*0.020)));
+    const dx = tx - boss.x, dy = ty - boss.y;
+    const dist = Math.hypot(dx,dy) || 1;
+    const step = Math.min(dist, normalSp);
+    boss.x += dx/dist * step;
+    boss.y += dy/dist * step;
+    if(dist <= normalSp + 0.01) boss.returning = 0;
+  } else {
+    boss.x = tx;
+    boss.y = ty;
+  }
+
   boss.muzzleX = null; boss.stopX = null; boss.stopY = null;
 }
-
- if(!(boss.laserHold && boss.laserHold>0)){ boss.x = clamp(boss.x, W*0.55, W - boss.w - 18); } if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
+if(!(boss.laserHold && boss.laserHold>0)){
+  boss.x = clamp(boss.x, W*0.55, W - boss.w - 18);
+}
+if(boss.hp < boss.maxHP*.6) boss.phase=2; if(boss.hp < boss.maxHP*.28) boss.phase=3; if(boss.hp < boss.maxHP*.12) boss.phase=4;
  // === LASER_CYCLE_V6: STG7は常に3本→3本… / STG6は1本→1本…（狙わない/停止→溜め→発射→移動） ===
  const stgBoss2 = (boss.stage||stage);
  const isLaserBoss = ((stgBoss2===7 && boss.phase>=2) || (stgBoss2===6 && boss.phase>=2));
@@ -3558,7 +3602,7 @@ if(hitTerrainRect(b.x,b.y,b.w,b.h)){ addBurst(b.x+b.w/2,b.y+b.h/2,'#ffb347',3,.9
   p.x += (ax/len) * v;
   p.y += (ay/len) * v;
  }
- if(Math.hypot(player.x-p.x, player.y-p.y) < 22){ capsuleCount++;
+ if(Math.hypot(player.x-p.x, player.y-p.y) < 22){ capsuleCount++; dmgLv++;
 
   score += 80;
 
