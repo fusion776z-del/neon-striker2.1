@@ -155,14 +155,23 @@ const comp = audioCtx.createDynamicsCompressor();
 const curve = new Float32Array(2048);
 for(let i=0;i<curve.length;i++){
 const x = i/(curve.length-1)*2-1;
-curve[i] = Math.tanh(x*1.55);
+curve[i] = Math.tanh(x*1.95);
 }
 drive.curve = curve;
 hp.type = 'highpass'; hp.frequency.value = 26; hp.Q.value = 0.75;
-lp.type = 'lowpass'; lp.frequency.value = 10200; lp.Q.value = 0.35;
+lp.type = 'lowpass'; lp.frequency.value = 9000; lp.Q.value = 0.35;
 delay.delayTime.value = 0.165;
 fb.gain.value = 0.22;
 wet.gain.value = 0.18;
+  // METALCORE_V2: diffuse reverb (small, CPU-light)
+  const revIn = audioCtx.createGain();
+  const revOut = audioCtx.createGain();
+  revOut.gain.value = 0.10;
+  const rd1 = audioCtx.createDelay(0.12); rd1.delayTime.value = 0.029;
+  const rd2 = audioCtx.createDelay(0.12); rd2.delayTime.value = 0.041;
+  const rd3 = audioCtx.createDelay(0.12); rd3.delayTime.value = 0.053;
+  const rfb = audioCtx.createGain(); rfb.gain.value = 0.33;
+
 dry.gain.value = 1.0;
 comp.threshold.value = -24;
 comp.knee.value = 18;
@@ -175,6 +184,7 @@ drive.connect(hp);
 hp.connect(lp);
 lp.connect(dry);
 lp.connect(delay);
+  lp.connect(revIn);
 delay.connect(wet);
 delay.connect(fb);
 fb.connect(delay);
@@ -328,6 +338,21 @@ src.start(when); src.stop(when + dur + 0.02);
 function kick(when, gain, pumpAmt){
 if(!bgmBus) return;
 pump(when, pumpAmt || 0.28);
+  // METALCORE_V2: kick click transient (adds attack without relying on sub)
+  try{
+    const ns = audioCtx.createBufferSource();
+    ns.buffer = ensureBgmNoise();
+    const nHp = audioCtx.createBiquadFilter();
+    nHp.type='highpass'; nHp.frequency.value = 6200;
+    const nAmp = audioCtx.createGain();
+    nAmp.gain.setValueAtTime(0.0001, when);
+    nAmp.gain.linearRampToValueAtTime(Math.max(0.0002, gain*0.10), when + 0.002);
+    nAmp.gain.exponentialRampToValueAtTime(0.0001, when + 0.018);
+    ns.connect(nHp); nHp.connect(nAmp);
+    connectPanned(nAmp, -0.02);
+    ns.start(when); ns.stop(when + 0.03);
+  }catch(_e){}
+
 const osc = audioCtx.createOscillator();
 const amp = audioCtx.createGain();
 osc.type='sine';
@@ -339,6 +364,115 @@ amp.gain.exponentialRampToValueAtTime(0.0001, when + 0.22);
 osc.connect(amp);
 connectPanned(amp, -0.05);
 osc.start(when); osc.stop(when + 0.26);
+}
+
+// === METALCORE_BGM_TOOLS_V2: distorted guitar + mid-bass layer ===
+function guitarChord(note, when, dur, gain, pan){
+  if(!bgmBus) return;
+
+  // pick transient
+  try{
+    const ns = audioCtx.createBufferSource();
+    ns.buffer = ensureBgmNoise();
+    const hpN = audioCtx.createBiquadFilter();
+    hpN.type='highpass'; hpN.frequency.setValueAtTime(7000, when);
+    const nAmp = audioCtx.createGain();
+    nAmp.gain.setValueAtTime(0.0001, when);
+    nAmp.gain.linearRampToValueAtTime(Math.max(0.0002, gain*0.08), when + 0.002);
+    nAmp.gain.exponentialRampToValueAtTime(0.0001, when + 0.016);
+    ns.connect(hpN); hpN.connect(nAmp);
+    connectPanned(nAmp, (pan==null?0:pan));
+    ns.start(when); ns.stop(when + 0.03);
+  }catch(_e){}
+
+  const o1 = audioCtx.createOscillator();
+  const o2 = audioCtx.createOscillator();
+  const o3 = audioCtx.createOscillator();
+  o1.type='sawtooth';
+  o2.type='square';
+  o3.type='sawtooth';
+  o1.frequency.setValueAtTime(midiHz(note), when);
+  o2.frequency.setValueAtTime(midiHz(note), when);
+  o3.frequency.setValueAtTime(midiHz(note), when);
+  o2.detune.setValueAtTime(-9, when);
+  o3.detune.setValueAtTime(9, when);
+
+  const hp = audioCtx.createBiquadFilter();
+  hp.type='highpass'; hp.frequency.setValueAtTime(150, when);
+
+  const mid = audioCtx.createBiquadFilter();
+  mid.type='peaking';
+  mid.frequency.setValueAtTime(1350, when);
+  mid.Q.setValueAtTime(0.95, when);
+  mid.gain.setValueAtTime(7.0, when);
+
+  const sh = audioCtx.createWaveShaper();
+  const curve = new Float32Array(2048);
+  const drive = 2.45;
+  for(let i=0;i<curve.length;i++){
+    const x = i/(curve.length-1)*2-1;
+    curve[i] = Math.tanh(x*drive);
+  }
+  sh.curve = curve;
+
+  const cabLP = audioCtx.createBiquadFilter();
+  cabLP.type='lowpass'; cabLP.frequency.setValueAtTime(4000, when); cabLP.Q.setValueAtTime(0.7, when);
+
+  const cabNotch = audioCtx.createBiquadFilter();
+  cabNotch.type='peaking';
+  cabNotch.frequency.setValueAtTime(3200, when);
+  cabNotch.Q.setValueAtTime(1.2, when);
+  cabNotch.gain.setValueAtTime(-4.5, when);
+
+  const amp = audioCtx.createGain();
+  amp.gain.setValueAtTime(0.0001, when);
+  amp.gain.linearRampToValueAtTime(gain, when + 0.012);
+  amp.gain.exponentialRampToValueAtTime(Math.max(0.0001, gain*0.28), when + dur*0.35);
+  amp.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+
+  o1.connect(hp); o2.connect(hp); o3.connect(hp);
+  hp.connect(mid);
+  mid.connect(sh);
+  sh.connect(cabLP);
+  cabLP.connect(cabNotch);
+  cabNotch.connect(amp);
+  connectPanned(amp, (pan==null?0:pan));
+
+  o1.start(when); o2.start(when); o3.start(when);
+  o1.stop(when + dur + 0.03);
+  o2.stop(when + dur + 0.03);
+  o3.stop(when + dur + 0.03);
+}
+
+function midBass(note, when, dur, gain, pan){
+  if(!bgmBus) return;
+  const osc = audioCtx.createOscillator();
+  const amp = audioCtx.createGain();
+  const hp = audioCtx.createBiquadFilter();
+  const lp = audioCtx.createBiquadFilter();
+  const sh = audioCtx.createWaveShaper();
+
+  osc.type='sawtooth';
+  osc.frequency.setValueAtTime(midiHz(note), when);
+
+  hp.type='highpass'; hp.frequency.setValueAtTime(120, when);
+  lp.type='lowpass';  lp.frequency.setValueAtTime(1200, when);
+
+  const curve = new Float32Array(1024);
+  for(let i=0;i<curve.length;i++){
+    const x=i/(curve.length-1)*2-1;
+    curve[i]=Math.tanh(x*1.35);
+  }
+  sh.curve = curve;
+
+  amp.gain.setValueAtTime(0.0001, when);
+  amp.gain.linearRampToValueAtTime(gain, when + 0.010);
+  amp.gain.exponentialRampToValueAtTime(0.0001, when + dur);
+
+  osc.connect(hp); hp.connect(sh); sh.connect(lp); lp.connect(amp);
+  connectPanned(amp, (pan==null?0:pan));
+
+  osc.start(when); osc.stop(when + dur + 0.03);
 }
 const CHORDS = { m:[0,3,7], M:[0,4,7], sus2:[0,2,7], dom7:[0,4,7,10] };
 function chordTones(tonicMidi, chord){ const ivs = CHORDS[chord.t] || CHORDS.m; return ivs.map(iv => tonicMidi + chord.r + iv); }
@@ -420,13 +554,32 @@ const kdGain = (song.boss ? 0.128 : 0.110);
 const bassGain= (song.boss ? 0.160 : 0.142);
 for(let i=0;i<16;i++){
 const t = when + i*step;
-if(song.kick[i]) kick(t, kdGain, song.boss?0.34:0.28);
+if(song.kick[i]){
+      kick(t, kdGain, song.boss?0.34:0.28);
+      // METALCORE_V2: tight chug on kick (root power)
+      const root = (tonicBass + chord.r);
+      guitarChord(root+24, t + step*0.01, step*0.55, song.boss?0.018:0.014, -0.12);
+      guitarChord(root+24+7, t + step*0.01, step*0.55, song.boss?0.016:0.012,  0.12);
+    }
 if(song.snare[i]){
-noiseDrum(t, 0.110, snGain, 'snare');
-stab(tonicLead-12, t, 0.06, song.boss?0.012:0.010, 0.02, false);
-}
+      noiseDrum(t, 0.110, snGain, 'snare');
+      stab(tonicLead-12, t, 0.06, song.boss?0.012:0.010, 0.02, false);
+      // METALCORE_V2: snare body thump
+      try{
+        const body = audioCtx.createOscillator();
+        const ba = audioCtx.createGain();
+        body.type='triangle';
+        body.frequency.setValueAtTime(210, t);
+        ba.gain.setValueAtTime(0.0001, t);
+        ba.gain.linearRampToValueAtTime(Math.max(0.0002, snGain*0.55), t+0.004);
+        ba.gain.exponentialRampToValueAtTime(0.0001, t+0.12);
+        body.connect(ba);
+        connectPanned(ba, 0.02);
+        body.start(t); body.stop(t+0.14);
+      }catch(_e){}
+    }
 if(song.hat[i]){
-const open = song.boss && (i===7 || i===15);
+const open = song.boss && (i===15);
 noiseDrum(t + (i%2?0.004:0), open?0.080:0.042, open?hatGain*1.18:hatGain, 'hat');
 }
 if(i===0 || i===6 || i===8 || i===14){
@@ -437,11 +590,18 @@ const n = tones[k] + 12 + (k===2?12:0);
 const pan = (-0.18 + k*0.18);
 stab(n, t + step*0.02, dur, g, pan, song.boss);
 }
-}
+
+    // METALCORE_V2: sustained power-chord wall (in chord-hit)
+    const pr = tones[0]-12;
+    guitarChord(pr, t + step*0.02, dur*0.95, song.boss?0.020:0.016, -0.18);
+    guitarChord(pr+7, t + step*0.02, dur*0.95, song.boss?0.018:0.014,  0.18);
+  }
 const b = song.bass[i];
 if(b != null && b !== -1){
 const note = tonicBass + chord.r + b;
 subBass(note, t, step*1.45, bassGain, -0.03);
+    // METALCORE_V2: add mid-bass for punch/definition
+    midBass(note+12, t, step*1.10, song.boss?0.040:0.030, 0.00);
 }
 const m = song.lead[i];
 if(m != null && m !== -1){
@@ -1065,7 +1225,7 @@ const t=table[stage] || table[7];
 const BASE_W = 150;
 const BASE_H = 120;
 const BOSS_S = (typeof BOSS_SIZE_SCALE==='number' ? BOSS_SIZE_SCALE : 1.25);
-const coreHP = t.hp;
+const coreHP = t.hp * 2; // HP x2 (core+parts)
 const partHP = Math.round(coreHP * 0.22 * 3);
 const topHP = Math.round(coreHP * 0.18 * 3);
 const wingHP = Math.round(coreHP * 0.14 * 3);
